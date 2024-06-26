@@ -1,27 +1,22 @@
-#include <stdio.h>
 #include <iostream>
+#include <thread> // для работы с потоками
+#include <windows.h>
 
 using std::cout;
 using std::endl;
 
-// области видимости
-// int x = 10; // Глобальная переменная
-// int main() {
-//     int x = 20; // Локальная переменная
-//     std::cout << "Локальная x: " << x << std::endl;
-//     std::cout << "Глобальная x: " << ::x << std::endl; // Обращение к глобальной переменной x
-//     {
-//         cout << x << endl;
-//     }
-// }
+void foo(int i, ...);
+
+struct P {
+    int x;
+    int y;
+    int z;
+};
 
 int main() {
-    const int x = 10;
-    int i[x] {};
-
-    for (auto &n : i) {
-        cout << n << endl;
-    }
-
-
+    SetConsoleOutputCP(CP_UTF8); 
+    int x = 1;
+    int &y = x;
+    int &z = y;
+    cout << z;
 }
