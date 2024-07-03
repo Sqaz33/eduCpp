@@ -719,7 +719,7 @@ void swap(T& x, T& y) {
 int main() {
     int i = 0;
     int j = 1;
-    swap(i, j); // так можно, (примерно, если типы аргументов равны)
+    swap(i, j); // не явное инстанцирование шаблона
     C<int> C(1);    
 }
 
@@ -791,13 +791,18 @@ void foo1(int v) {
 
 //----------------------------------------------------------------------------
 // remove_const, remove_reference  
-template<class T>
+template<typename T>
 struct remove_const {
+    T() {
+        cout << "just_T" << endl;
+    }
     typedef T type;
 };
 
-template<class T>
+template<typename T>
 struct remove_const<const T> {
+    T() {
+        cout << "const_T" << endl;
+    }
     typedef T type;
 };
-

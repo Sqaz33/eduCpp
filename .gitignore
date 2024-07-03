@@ -1,0 +1,4 @@
+build/
+.vscode/
+*.cpp
+!edu.cpp
