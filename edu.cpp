@@ -589,6 +589,38 @@ int main() {
     b1.foo(); // с virtual вызовится D::foo()
 }
 
+// работа с другими методами
+struct A {
+    virtual void foo1() {
+        cout << "A1" << endl;
+    }
+    void foo2() {
+        cout << "A2" << endl;
+    }
+    virtual ~A() = default;
+};
+
+struct B : A {
+    void foo1() override {
+        cout << "B1" << endl;
+    }
+    void foo2() {
+        cout << "B2" << endl;
+    }
+};
+
+
+int main() {
+    B b;
+    A& ab = dynamic_cast<A&>(b);
+    ab.foo1();
+    ab.foo2();
+    // B1  |  <<<
+    // A2  |  <<< output 
+}
+
+
+
 // virtual деструктор
 struct B {
     virtual ~B() = default;
