@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.15)
+project(eduCpp)
 
-project(edu LANGUAGES C CXX)
 
-# Добавление исполняемого файла и привязка зависимостей
-add_executable(edu main.cpp)
+find_package(fmt CONFIG REQUIRED)
+
+
+# Добавьте исполняемый файл и свяжите ег``о с библиотекой fmt
+add_executable(eduCpp main.cpp)
+target_link_libraries(eduCpp PRIVATE fmt::fmt)
