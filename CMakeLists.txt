@@ -1,10 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
-project(eduCpp)
 
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
-find_package(fmt CONFIG REQUIRED)
+project(edu)
 
-
-# Добавьте исполняемый файл и свяжите ег``о с библиотекой fmt
 add_executable(eduCpp main.cpp)
-target_link_libraries(eduCpp PRIVATE fmt::fmt)

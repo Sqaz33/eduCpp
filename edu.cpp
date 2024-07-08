@@ -838,3 +838,162 @@ struct remove_const<const T> {
     }
     typedef T type;
 };
+
+//----------------------------------------------------------------------------
+// правила шаблонного вывода
+template<class T>
+void f(T& x) {
+
+}
+
+int main() {
+    int x; f(x);             // T = int, x: int&
+    int& y = x; f(y);        // T = int, x: int&
+    const int z = 0; f(z);   // T = const int, x: const int&
+    const int& t = z; f(t);  // T = const int, x: const int&
+
+    return 0; 
+}
+
+template<class T>
+void f(T x) {
+
+}
+
+int main() {
+    int x; f(x);             // T = int, x: int
+    int& y = x; f(y);        // T = int, x: int
+    const int z = 0; f(z);   // T = int, x: int
+    const int& t = z; f(t);  // T = int, x: int
+
+    return 0; 
+}
+
+//----------------------------------------------------------------------------
+// non-type template parameters
+template<class T, int n> // Является свойством типа
+class array {
+
+};
+
+//----------------------------------------------------------------------------
+// template template parameters
+template<typename T>
+class C {
+
+};
+
+template<typename X, template<typename> class T> 
+void foo(const T<X> &t) {
+
+}
+
+int main() {
+    foo<int, C>(C<int>());
+}
+//----------------------------------------------------------------------------
+// значения по умолнчанию в шаблонах
+template<typename T = int>
+struct C {
+
+};
+
+
+//----------------------------------------------------------------------------
+// Variadic templates (функция с переменным количество шаблонных аргументов)
+template<typename ... Args> 
+void foo(Args ... args) {
+
+}
+
+template<typename Head>
+void foo(Head x) {
+    cout << x << endl;
+} 
+
+template<typename Head, typename ... Tail> 
+void foo(Head x, Tail ... t) {
+    cout << x << " ";
+    foo(t...);
+}
+
+
+
+//----------------------------------------------------------------------------
+// функтуры
+template<class T>
+struct less {
+    bool operator()(const T& x, const T& y) {
+        return x < y;
+    }
+};
+
+template<typename T, typename Cmp>
+void sort(T* begin, T* end, Cmp cmp) {
+    //...
+    cmp(*x, *y);
+    //...
+}
+
+
+
+//----------------------------------------------------------------------------
+// CRTP
+template<class T>
+struct Base {
+    void f() const {
+        static_cast<const T*>(this)->f();
+    }
+};
+
+struct Derived : Base<Derived> {
+    void f() const {
+        std::cout << "Derived" << std::endl;
+    }
+};
+
+
+struct Derived1 : Base<Derived1> {
+    void f() const {
+        std::cout << "Derived1" << std::endl;
+    }
+};
+
+int main() {
+    Derived d;
+    Base<Derived>* b = &d;
+
+    Base<Derived1>* b1 = new Derived1();
+
+    b1->f();
+
+    b->f();
+}
+
+
+
+//----------------------------------------------------------------------------
+// исключения 
+int main() {
+    /*
+     *  Приведение типов в try-catch только между родителем и наследником, 
+     *  и от любого указателя к void*
+    */
+    try {
+        throw static_cast<int>(1);
+    } catch (double d) {
+        cout << "double" << endl;
+    } catch (int x) {
+        cout << "int" << endl;
+    } catch (...) {
+
+    }
+
+    try {
+        throw static_cast<int>(1);
+    } catch (const int& i) {
+        // обработка чего-то
+        throw; // отправить исключение на уровень выше
+    } 
+
+}  

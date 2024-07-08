@@ -1,4 +1,3 @@
 build/
 .vscode/
-*.cpp
-!edu.cpp
+main.cpp
