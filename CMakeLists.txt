@@ -5,4 +5,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 project(edu)
 
+include_directories(${CMAKE_SOURCE_DIR})
+
 add_executable(eduCpp main.cpp)

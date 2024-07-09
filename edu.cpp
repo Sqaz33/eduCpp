@@ -995,5 +995,306 @@ int main() {
         // обработка чего-то
         throw; // отправить исключение на уровень выше
     } 
-
 }  
+
+// копирование объекта исключения 
+struct S {
+    int x;
+
+    S() : x(0) {
+        cout << "constr" << endl;
+    }
+
+    S(const S& other) {
+        x = other.x;
+        cout << "copy" << endl;
+    }
+};
+
+void foo() {
+    static S s;
+    throw s;
+}
+
+
+int main() {
+
+    try {
+        foo();
+    } catch (const S& s) {
+
+    } 
+
+    // constr
+    // copy
+}  
+
+// срезка при копировании
+struct Base {
+
+};
+
+struct Derived : Base {
+
+};
+
+int main() {
+    try {  
+        Derived d;
+        Base b& = d;
+        throw b; // создастся копия части Base и d
+    } catch (Base& b) {
+
+    }
+}  
+
+
+// throw без параметра
+int main() {
+    try {
+        throw Derived();
+    } catch (Base &b) {
+        throw b; // копия Base;
+        throw; // без копии Base;
+    }
+}  
+
+
+//----------------------------------------------------------------------------
+// noexcept 
+void foo() noexcept { // говорит о том, что функция не бросает исключения
+
+}
+
+int main() {
+    noexcept(foo()); // true, если функция noexcept
+}
+
+void foo() noexcept(true) { // условный noexcept
+
+}
+
+
+//----------------------------------------------------------------------------
+// Исключение в конструкторе
+struct U {
+    int* p;
+    U() {
+        p = new int;
+        throw 1;
+        // деструктор не вызывается - утечка памяти
+    }
+
+    ~U() {
+        delete p;
+    }
+};
+
+
+int main() {
+    try {
+        U u;
+    } catch (...) {
+         
+    }
+}  
+
+// паттерн такой утечки
+void f() {
+    p = new ...
+    throw ...;
+    delete p;
+}
+
+
+//----------------------------------------------------------------------------
+// Исключение в конструкторе
+struct U {
+    int* p;
+    U() {
+        p = new int;
+    }
+
+    ~U() {
+        delete p;
+        throw 1; // может быть ошибка
+        //---------------------
+        delete p;
+        if (std::uncaught_exceptions()) { // решение проблеммы 
+            throw 1; 
+        }
+    }
+};
+
+void foo() {
+    U u;
+    throw 1;     // runtime error
+}
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// аллокаторы
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// new expression 
+int* n = new int(1);
+int* arr = new int[100] {};
+
+// operator new
+void* n2 = ::operator new(10);
+void* arr2 = ::operator new[](10);
+int* n3 = static_cast<int*>(::operator new(sizeof(int)));
+
+
+struct S {
+    int i;
+    S(int i) : i() {};
+};
+
+
+int main() {
+    void* ptr = operator new(sizeof(S));
+    //placement new
+    S* S_ptr = new(ptr) S(1);
+
+    //new
+    S* S_ptr2 = new S(1);
+}
+
+
+//----------------------------------------------------------------------------
+// перегрузки operator new
+
+// перегрузка operator new
+void* operator new(size_t sz) {
+    cout << "operator new" << endl;
+    return malloc(sz);
+}
+
+struct S {
+    int i;
+    S(int i) : i() {
+        cout << "S constructor" << endl;
+    };
+
+    void* operator new(size_t sz, void* ptr) {
+        cout << "placement new" << endl;
+        return ptr;
+    }
+};
+
+// Если происходит вызов перегруженного operator new, то должен вызываться перегруженный operator delete.
+struct S {
+    int i;
+    S(int i) : i(i) {
+        cout << "S constructor" << endl;
+    };
+
+    void* operator new(size_t sz, void* p) {
+        cout << "S::operator placement new" << endl;
+        return p;
+    }
+
+    void* operator new(size_t sz,int tst) {
+        tst++; // do something with tst
+        cout << "S::operator new" << endl;
+        return malloc(sz);
+    }
+
+    void operator delete(void* ptr, int tst) {
+        tst--;
+        cout << "S::operator delete" << endl;
+        free(ptr);
+    }
+
+};
+
+
+
+int main() {
+    S* sPtr = static_cast<S*>(S::operator new(sizeof(S), 1));
+    sPtr = new(sPtr) S(1);
+    S& s = *sPtr;
+    cout << s.i << endl;
+    S::operator delete(sPtr, 1);
+    cout << s.i << endl;
+}
+
+//----------------------------------------------------------------------------
+// nothrow new
+#include <new>
+
+void* operator new(size_t sz, const std::nothrow_t& x) noexcept {
+    return malloc(sz);
+}
+
+int main() {
+    void* ptr = ::operator new(sizeof(int), std::nothrow);
+}
+
+
+//----------------------------------------------------------------------------
+// new_handler
+#include <new>
+
+void foo() {
+    std::cerr << "Не удалось выделить память! Попытка очистить ресурсы и повторить...\n";
+    // Попытка освободить память или выполнить другие действия по очистке
+    // Например:
+    // some_cleanup_function();
+
+    // Если мы не можем освободить достаточно памяти, нужно завершить программу
+    std::terminate();
+}
+
+
+int main() {
+    SetConsoleOutputCP(CP_UTF8); 
+    std::set_new_handler(foo);
+    long long *arr = new long long[1000000000000];
+}
+
+//----------------------------------------------------------------------------
+// std::allocator
+template<class T>
+struct my_allocator {
+    typedef T value_type;
+    T* allocate(size_t count) const {
+        return static_cast<T*>(::operator new[](sizeof(T) * count));
+    }
+
+    void deallocate(T* p, size_t count) const {
+        delete[] p;
+    }
+
+    template<typename ... Args>
+    void* construct(T* p, Args& ... args) const noexcept(noexcept(T(args ...))) {
+        return new(p) T(args ...);
+    }
+
+    void destroy(T* p) const noexcept(noexcept(~T())) {
+        p->~T();
+    }
+};
+
+
+int main() {
+    my_allocator<int> alloc;
+    int* nw_int = alloc.allocate(100);
+    int i = 1;
+    alloc.construct(nw_int, i);
+
+    for (int i = 0; i < 100; i++) {
+        cout << nw_int[i] << endl;
+    }
+}
+
+//----------------------------------------------------------------------------
+// std::allocator_traits
+template<class Alloc>
+struct std_allocator_traits {
+    static Alloc::value_type* allocate(/*не const ссылка*/ Alloc& a, size_t n) {
+        return a.allocate(n);
+    }
+};
+
