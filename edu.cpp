@@ -1298,3 +1298,195 @@ struct std_allocator_traits {
     }
 };
 
+
+//----------------------------------------------------------------------------
+#define OCUPIED true
+#define UNOCUPIED false
+#define OcupiedStatus bool 
+
+template<class T>
+class GoofyAhhAllocator final {
+public:
+    typedef T type_name;
+
+    GoofyAhhAllocator()  {
+        ocupiedFlags = new bool[MAX_NUM_OBJ] {};
+        pool = static_cast<T*>(
+            ::operator new(MEMORY_2GB)
+        );
+        for (int i = 0; i < MAX_NUM_OBJ; i++) {
+            ocupiedFlags[i] = false;
+        }
+    }
+
+    //--------------------------------------------------------
+    //--------------------------------------------------------
+    //--------------------alocator func-----------------------
+    //--------------------------------------------------------
+    //--------------------------------------------------------
+    T* allocate_one() noexcept {
+        int i = getFirstUnoccupied();
+        setOcupied(i, OCUPIED);
+        lastOcupied = i;
+        return pool + i;
+    }
+
+    void dealocate_one(T* ptr) noexcept {
+        int ind = static_cast<int>(ptr - pool);
+        setOcupied(ind, UNOCUPIED);
+    }
+
+    template<typename ... Args> 
+    void* construct(T* ptr, Args... args) const noexcept(noexcept(T(args...))) {
+        return new(ptr) T(args...);
+    }
+
+    void destroy(T* p) const noexcept(noexcept(p->~T())) {
+        p->~T();
+    }
+    //--------------------------------------------------------
+    //--------------------------------------------------------
+    //--------------------------------------------------------
+    //--------------------------------------------------------
+    //--------------------------------------------------------
+
+    size_t maxNumObj() const noexcept {
+        return MAX_NUM_OBJ;
+    }
+
+private:
+    bool* ocupiedFlags;
+    T* pool;
+
+    const size_t MEMORY_2GB = 2147483648 + (2147483648 % sizeof(T));
+    const size_t MAX_NUM_OBJ = MEMORY_2GB / sizeof(T);
+    
+    int getFirstUnoccupied() const noexcept {
+        for (int i = 0; i < MAX_NUM_OBJ; i++) {
+            if (getOcupied(i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    //--------------------------------------------------------------
+    inline void setOcupied(int ind, OcupiedStatus status) noexcept {
+        ocupiedFlags[ind] = status;
+    }
+
+    inline OcupiedStatus getOcupied(int ind) const noexcept {
+        return ocupiedFlags[ind];
+    }
+    //--------------------------------------------------------------
+
+    GoofyAhhAllocator& operator=(const GoofyAhhAllocator& other) = delete;
+    GoofyAhhAllocator(const GoofyAhhAllocator& other) = delete;
+}; 
+//----------------------------------------------------------------------------
+
+// std::vector
+#include <exception>
+#include <memory>
+#include <iostream>
+
+template<class T, class Alloc = std::allocator<T>>
+class vectorCppLess11 {
+public:
+    vectorCppLess11() 
+    :
+    m_size(0),
+    m_capacity(16)
+    {
+        arr = traits::allocate(alloc, m_capacity);
+    }
+
+    vectorCppLess11(const vectorCppLess11<T, Alloc>& v) 
+    :
+    m_size(v.m_size),
+    m_capacity(v.m_capacity),
+    alloc(
+        traits::select_on_container_copy_consruciont(v.alloc) // возвращает, нужный аллокатор (новый или тот же из старого вектора)
+    )
+    {
+        arr = traits::alloacate(alloc, m_capacity);
+        for (int i = 0; i < m_size; i++) {
+            traits::construct(alloc, arr+i, v.arr[i]);
+        }
+    }
+
+    void push_back(const T& x) {
+        if (m_size >= m_capacity) {
+            reserve(m_capacity << 1);
+        }
+        traits::construct(alloc, arr+m_size, x);
+        m_size++;
+    }
+
+    size_t size() {
+        return m_size;
+    }  
+
+    size_t capacity() {
+        return m_capacity;
+    }
+
+    void shrink_to_fit() {
+        // сокращает capacity до size    
+    }
+
+    void resize(size_t size, T value = T()) {
+        // меняет размер
+        // новые элементы инициализируются значением
+    }
+
+    void swap(const vectorCppLess11<T, Alloc> other) {
+        // меняет местами вектора
+    }
+
+    T& operator[](size_t i) {
+        return arr[i];
+    }
+
+    const T& operator[](size_t i) const {
+        return arr[i];
+    }
+    
+    T& at(size_t ind) {
+        if (m_size <= ind) {
+            throw std::out_of_range;
+        }
+        return arr[ind];
+    }
+
+    const T& at(size_t ind) const {
+        if (m_size <= ind) {
+            throw std::out_of_range;
+        }
+        return arr[ind];
+    }
+
+    template<class ... Args>
+    void emplace_back(const Args& ... args) {
+        push_back(T(args...));
+    }
+
+private:
+    size_t m_size;
+    size_t m_capacity;
+    T* arr;
+    Alloc alloc;
+
+    using traits = std::allocator_traits<Alloc>;
+
+    void reserve(size_t newCapacity) {
+        T* newArr = traits::allocate(alloc, newCapacity);
+        for (int i = 0; i < m_size; i++) {
+            traits::construct(alloc, newArr+i, arr[i]);
+            traits::destroy(alloc, arr+i);
+        }
+        traits::deallocate(alloc, arr, m_capacity);
+        arr = newArr;
+        m_capacity = newCapacity;
+    }
+};
