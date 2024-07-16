@@ -938,7 +938,7 @@ void sort(T* begin, T* end, Cmp cmp) {
 
 
 //----------------------------------------------------------------------------
-// CRTP
+// CRTP (Иметация полиморфизма)
 template<class T>
 struct Base {
     void f() const {
@@ -1607,3 +1607,150 @@ int main() {
 
 }
 
+//----------------------------------------------------------------------------
+// Итераторы
+
+int main() {
+    std::vector<int> v = {1, 2, 3, 4};
+
+    for (std::vector<int>::iterator it = v.begin(); it != v.end(); ++it) {
+        cout << *it << endl;
+    }
+
+}
+
+#include <iterator>
+template<class T>
+class MyContainer {
+public:
+    using valu_type = T;
+
+    MyContainer(std::initializer_list<T> list) : v(list) {};
+
+    size_t size() const {
+        return v.size();
+    }
+
+    T& operator[](size_t ind) {
+        return v[ind];
+    }
+    void push_back(const T& x) {
+        v.push_back(x);
+    }
+
+    const T& operator[](size_t ind) const {
+        return v[ind];
+    }
+    
+    //------------------------------------------------------
+    //------------------------------------------------------
+    //------------------------------------------------------
+    //------------------------------------------------------
+    //итераторы 
+    class iterator {
+    public:
+        iterator(T* v): it(v) {}
+
+        iterator(const T* v) : it(v) {};
+        
+        iterator& operator++() {
+            ++it;
+            return *this;
+        }
+
+        T& operator*() const {
+            return *it;
+        }
+        
+        bool operator==(const iterator& other) const {
+            return it == other.it;
+        }
+
+        bool operator!=(const iterator& other) const {
+            return !(*this == other);
+        }
+    private:
+        T* it;
+    };
+
+    iterator begin() {
+        return iterator(v.data());
+    }
+
+    iterator end() {
+        return iterator(v.data() + v.size());
+    }
+    
+    iterator rbegin() {
+        return iterator(v.data() + v.size() - 1);
+    }
+
+    iterator rend() {
+        return iterator(v.data() - 1);
+    }
+
+    class const_iterator {
+    public:
+        const_iterator(T* v): it(v) {}
+
+        const_iterator(const T* v) : it(v) {};
+        
+        const_iterator& operator++() {
+            ++it;
+            return *this;
+        }
+
+        const T& operator*() const {
+            return *it;
+        }
+        
+        bool operator==(const const_iterator& other) const {
+            return it == other.it;
+        }
+
+        bool operator!=(const const_iterator& other) const {
+            return !(*this == other);
+        }
+    private:
+        const T* it;
+    };
+
+    const_iterator begin() const {
+        return const_iterator(v.data());
+    }
+
+    const_iterator end() const {
+        return const_iterator(v.data() + v.size());
+    }
+
+    const_iterator rbegin() const {
+        return const_iterator(v.data() + v.size() - 1);
+    }
+
+    const_iterator rend() const {
+        return const_iterator(v.data() - 1);
+    }
+
+    const_iterator cbegin() const {
+        return const_iterator(v.data());
+    }
+
+    const_iterator cend() const {
+        return const_iterator(v.data() + v.size());
+    }
+
+    
+    using reverse_iterator = std::reverse_iterator<MyContainer<T>::iterator>;
+private:
+    std::vector<T> v;
+};
+
+
+int main() {
+    const MyContainer<int> mc = {1, 2, 3};
+
+    for (const auto& n : mc) {
+        cout << n << endl;
+    }
+
+}   
