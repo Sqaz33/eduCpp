@@ -1618,12 +1618,12 @@ int main() {
     }
 
 }
-
-#include <iterator>
 template<class T>
 class MyContainer {
 public:
     using valu_type = T;
+
+    MyContainer() = default;
 
     MyContainer(std::initializer_list<T> list) : v(list) {};
 
@@ -1641,37 +1641,113 @@ public:
     const T& operator[](size_t ind) const {
         return v[ind];
     }
-    
-    //------------------------------------------------------
-    //------------------------------------------------------
-    //------------------------------------------------------
-    //------------------------------------------------------
-    //итераторы 
+
+
     class iterator {
     public:
-        iterator(T* v): it(v) {}
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = T*;
+        using reference = T&;
 
-        iterator(const T* v) : it(v) {};
+        iterator(T* v): it(v) {}
         
         iterator& operator++() {
             ++it;
             return *this;
         }
 
-        T& operator*() const {
-            return *it;
-        }
-        
-        bool operator==(const iterator& other) const {
-            return it == other.it;
+        iterator& operator--() {
+            --it;
+            return *this;
         }
 
-        bool operator!=(const iterator& other) const {
-            return !(*this == other);
+        iterator& operator--(int) {
+            iterator tmp = *this;
+            --(*this);
+            return tmp;
         }
+
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        reference operator*() const {
+            return *it;
+        }
+
+        pointer operator->() const {
+            return it;
+        }
+
+        friend bool operator==(const iterator& a, const iterator& b)  {
+            return a.it == b.it;
+        }
+
+        friend bool operator!=(const iterator& a, const iterator& b) {
+            return !(a.it == b.it);
+        }
+        
     private:
         T* it;
     };
+
+    class const_iterator {
+    public:
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const T*;
+        using reference = const T&;
+
+        const_iterator(const T* v) : it(v) {};
+        
+        const_iterator& operator++() {
+            ++it;
+            return *this;
+        }
+
+        const_iterator operator++(int) {
+            const_iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        const_iterator& operator--() {
+            --it;
+            return *this;
+        }
+
+        const_iterator operator--(int) {
+            const_iterator tmp = *this;
+            --(*this);
+            return tmp;
+        }
+
+        pointer operator->() const {
+            return it;
+        }
+
+        const reference operator*() const {
+            return *it;
+        }
+
+        friend bool operator==(const const_iterator& a, const const_iterator& b)  {
+            return a.it == b.it;
+        }
+
+        friend bool operator!=(const const_iterator& a, const const_iterator& b) {
+            return !(a.it == b.it);
+        }
+    private:
+        const T* it;
+    };
+
+
+    using iterator_trais = std::iterator_traits<MyContainer<T>::iterator>;
 
     iterator begin() {
         return iterator(v.data());
@@ -1681,39 +1757,17 @@ public:
         return iterator(v.data() + v.size());
     }
     
-    iterator rbegin() {
-        return iterator(v.data() + v.size() - 1);
+    using reverse_iterator = std::reverse_iterator<MyContainer<T>::iterator>;
+
+    reverse_iterator rbegin() {
+        return reverse_iterator(end());
     }
 
-    iterator rend() {
-        return iterator(v.data() - 1);
+    reverse_iterator rend() {
+        return reverse_iterator(begin());
     }
 
-    class const_iterator {
-    public:
-        const_iterator(T* v): it(v) {}
-
-        const_iterator(const T* v) : it(v) {};
-        
-        const_iterator& operator++() {
-            ++it;
-            return *this;
-        }
-
-        const T& operator*() const {
-            return *it;
-        }
-        
-        bool operator==(const const_iterator& other) const {
-            return it == other.it;
-        }
-
-        bool operator!=(const const_iterator& other) const {
-            return !(*this == other);
-        }
-    private:
-        const T* it;
-    };
+    
 
     const_iterator begin() const {
         return const_iterator(v.data());
@@ -1721,14 +1775,6 @@ public:
 
     const_iterator end() const {
         return const_iterator(v.data() + v.size());
-    }
-
-    const_iterator rbegin() const {
-        return const_iterator(v.data() + v.size() - 1);
-    }
-
-    const_iterator rend() const {
-        return const_iterator(v.data() - 1);
     }
 
     const_iterator cbegin() const {
@@ -1739,18 +1785,374 @@ public:
         return const_iterator(v.data() + v.size());
     }
 
-    
-    using reverse_iterator = std::reverse_iterator<MyContainer<T>::iterator>;
+    using const_reverse_iterator = std::reverse_iterator<MyContainer<T>::const_iterator>;
+
+    const_reverse_iterator crbegin() const {
+        return const_reverse_iterator(cend());
+    }
+
+    const_reverse_iterator crend() const {
+        return const_reverse_iterator(cbegin());
+    }
+
+
 private:
     std::vector<T> v;
 };
 
 
 int main() {
-    const MyContainer<int> mc = {1, 2, 3};
+    const MyContainer<int> mc = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
+    
     for (const auto& n : mc) {
         cout << n << endl;
     }
 
-}   
+}  
+
+
+//----------------------------------------------------------------------------
+template<
+    class Key, 
+    class T, 
+    class Comp = std::less<Key>,
+    class Alloc = std::allocator<std::pair<const Key, T>>
+>
+class MyMap {
+public:
+    using key_type = Key;
+    using mapped_type = T;
+    using value_type = std::pair<const Key, T>;
+    using allocator_type = Alloc;
+    using reference = value_type&;
+
+    T& operator[](const Key& key) {
+        Node* g = m_get(root, key);
+        if (g == nullptr) {
+            root = m_put(root, key, T());
+            g = m_get(root, key);
+        }
+        return g->val;
+    }
+
+    size_t size() const {
+        return m_size(root);
+    }
+
+    void del(const Key& key) {
+        root = m_delete(root, key);
+    }
+
+    bool contain(const Key& key) const {
+        return m_contain(root, key);
+    }
+
+private:
+
+    //----------------------------------------
+    struct Node {
+        Node(const Key& key, const T& val) 
+        : 
+        vt(key, val),
+        key(vt.first),
+        val(vt.second) 
+        {}
+
+        value_type vt;
+        const Key& key;
+        T& val;
+        Node* prev = nullptr;
+        Node* left = nullptr;
+        Node* right = nullptr;
+    }* root = nullptr;
+    //----------------------------------------
+
+    using NodeAlloc = typename Alloc::template rebind<Node>::other;
+    using traits = std::allocator_traits<NodeAlloc>;
+    
+    Comp comp;
+    NodeAlloc nodeAlloc;
+
+    bool m_contain(const Node* x, const Key& key) const {
+        if (x == nullptr) {
+            return false;
+        }
+        if (comp(key, x->key)) {
+            return m_contain(x->left, key);
+        } else if (comp(x->key, key)) {
+            return m_contain(x->right, key);
+        } else {
+            return true;
+        }
+    }
+
+    Node* m_put(Node* x, const Key& key, const T& val) { 
+        if (x == nullptr) {
+            Node* n = traits::allocate(nodeAlloc, 1);
+            traits::construct(nodeAlloc, n, key, val);
+            return n;
+        } else if (comp(key, x->key)) {
+            x->left = m_put(x->left, key, val);
+        } else if (comp(x->key, key)) {
+            x->right = m_put(x->right, key, val);
+        } else {
+            x->val = val;
+        }
+        return x;
+    }
+
+    Node* m_get(Node* x, const Key& key) {
+        if (x == nullptr) {
+            return nullptr;
+        }
+        if (comp(key, x->key)) {
+            return m_get(x->left, key);
+        } else if (comp(x->key, key)) {
+            return m_get(x->right, key);
+        } else {
+            return x;
+        }
+    }
+
+    Node* m_min(Node* x) {
+        if (x == nullptr) {
+            return nullptr;
+        }
+        if (x->left != nullptr) {
+            return m_min(x->left);
+        }
+        return x;
+    }
+
+    Node* m_max(Node* x) {
+        if (x == nullptr) {
+            return nullptr;
+        }
+        if (x->right != nullptr) {
+            return m_max(x->rigth);
+        }
+        return x;
+    }
+
+    size_t m_size(const Node* x) const {
+        if (x == nullptr) {
+            return 0;
+        }
+        return m_size(x->left) + m_size(x->right) + 1;
+    }
+
+    Node* m_deleteMin(Node* x) {
+        if (x->left == nullptr) {
+            return x->right;
+        }
+        x->left = m_deleteMin(x->left);
+        return x;
+    }
+
+    Node* m_delete(Node* x, const Key& key) {
+        if (x == nullptr) {
+            return nullptr;
+        }
+        if (comp(key, x->key)) {
+            x->left = m_delete(x->left, key);
+        } else if (comp(x->key, key)) {
+            x->right = m_delete(x->right, key);
+        } else {
+            if (x->right == nullptr) {
+                Node* left = x->left;
+                traits::destroy(nodeAlloc, x);
+                traits::deallocate(nodeAlloc, x, 1);
+                return left;
+            } 
+            if (x->left == nullptr) {
+                Node* right = x->right;
+                traits::destroy(nodeAlloc, x);
+                traits::deallocate(nodeAlloc, x, 1);
+                return right;
+            }
+            Node* tmp = x;
+            x = m_min(tmp->right);
+            x->right = m_deleteMin(tmp->right);
+            x->left = tmp->left;
+            traits::destroy(nodeAlloc, tmp);
+            traits::deallocate(nodeAlloc, tmp, 1);
+        }
+        return x;
+    }
+};
+
+//----------------------------------------------------------------------------
+// iterator_traits
+template<class Iter>
+void process_sequence(Iter begin, Iter end) {
+    using T = typename std::iterator_traits<Iter>::value_type;
+    T val = *begin;
+}
+
+
+//----------------------------------------------------------------------------
+// insert iterators
+#include <iterator>
+int main() {
+
+    // back_insert_iterator
+    // вызывается push_back
+    std::vector<int> v = {1, 2, 5, 6};
+    std::vector<int> v2;
+    std::back_insert_iterator<std::vector<int>> vIt(v2);
+
+    // копирует в конец v2
+    std::copy(v.begin(), v.end(), vIt);
+
+    
+    // template<class Container>
+    // std::back_insert_iterator<Container> back_inserter(Container& c)
+    // {
+    //     return std::back_insert_iterator<Container>(c);
+    // }
+    std::vector<int> v3;
+    std::copy(v.begin(), v.end(), std::back_inserter(v3));
+
+    std::vector<std::pair<int, char>> ic = {{1, '1'}, {2, '2'}, {3, '3'}};
+
+    std::map<int, char> mp;
+
+    std::insert_iterator<std::map<int, char>> it(mp, mp.end());
+
+    std::copy(ic.begin(), ic.end(), it);
+
+
+    for (const auto& p : mp) {
+        cout << p.second << endl;
+    }
+} 
+
+//----------------------------------------------------------------------------
+// stream iterators
+int main() {
+    std::locale::global(std::locale(""));
+    std::vector<char> in;
+    std::istream_iterator<char> start(std::cin), stop;
+    std::ostream_iterator<char> out(std::cout);
+    
+    std::copy(start, stop, std::back_inserter(in));
+
+    std::copy(in.begin(), in.end(), out);
+
+    
+
+    std::ifstream inputFile("t.txt"); 
+
+    std::istream_iterator<char> beginFile(inputFile), endFile;
+
+    for (auto& c = beginFile; c != endFile; ++c) {
+        cout << *c;
+    }
+    inputFile.close();
+
+
+}  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//----------------------------------------------------------------------------
+// моменты из собеза.
+struct A {
+    A() {
+       bar(); 
+       foo(); // A::foo()
+    }
+
+    void bar() {
+        A::foo(); 
+        // foo() -> B::foo()
+        // при вызове bar()->B::foo() в конструкторе - ub. 
+    }
+
+    virtual void foo() = 0; 
+};  
+
+void A::foo() {
+    cout << "Hi" << endl;
+};
+
+struct B : A {
+    void foo() {
+
+    }
+};
