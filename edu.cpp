@@ -685,18 +685,6 @@ struct B {
         return *this;
     };
     
-    B foo1() {
-        /*
-        PS D:\eduCpp\build\Debug> ."D:/eduCpp/build/Debug/edu.exe"
-        constructor
-        constructor
-        copy constructor
-        PS D:\eduCpp\build\Debug> 
-        */
-        B b;
-        return b;
-    }
-
     B foo2() {
         /*
         PS D:\eduCpp\build\Debug> ."D:/eduCpp/build/Debug/edu.exe"
@@ -838,6 +826,23 @@ struct remove_const<const T> {
     }
     typedef T type;
 };
+
+
+template<typename T>
+struct remove_reference {
+    using type = T;
+}; 
+
+template<typename T>
+struct remove_reference<T&> {
+    using type = T;
+};
+
+template<typename T>
+struct remove_reference<T&&> {
+    using type = T;
+}; 
+
 
 //----------------------------------------------------------------------------
 // правила шаблонного вывода
@@ -1298,315 +1303,6 @@ struct std_allocator_traits {
     }
 };
 
-
-//----------------------------------------------------------------------------
-#define OCUPIED true
-#define UNOCUPIED false
-#define OcupiedStatus bool 
-
-template<class T>
-class GoofyAhhAllocator final {
-public:
-    typedef T type_name;
-
-    GoofyAhhAllocator()  {
-        ocupiedFlags = new bool[MAX_NUM_OBJ] {};
-        pool = static_cast<T*>(
-            ::operator new(MEMORY_2GB)
-        );
-        for (int i = 0; i < MAX_NUM_OBJ; i++) {
-            ocupiedFlags[i] = false;
-        }
-    }
-
-    //--------------------------------------------------------
-    //--------------------------------------------------------
-    //--------------------alocator func-----------------------
-    //--------------------------------------------------------
-    //--------------------------------------------------------
-    T* allocate_one() noexcept {
-        int i = getFirstUnoccupied();
-        setOcupied(i, OCUPIED);
-        lastOcupied = i;
-        return pool + i;
-    }
-
-    void dealocate_one(T* ptr) noexcept {
-        int ind = static_cast<int>(ptr - pool);
-        setOcupied(ind, UNOCUPIED);
-    }
-
-    template<typename ... Args> 
-    void* construct(T* ptr, Args... args) const noexcept(noexcept(T(args...))) {
-        return new(ptr) T(args...);
-    }
-
-    void destroy(T* p) const noexcept(noexcept(p->~T())) {
-        p->~T();
-    }
-    //--------------------------------------------------------
-    //--------------------------------------------------------
-    //--------------------------------------------------------
-    //--------------------------------------------------------
-    //--------------------------------------------------------
-
-    size_t maxNumObj() const noexcept {
-        return MAX_NUM_OBJ;
-    }
-
-private:
-    bool* ocupiedFlags;
-    T* pool;
-
-    const size_t MEMORY_2GB = 2147483648 + (2147483648 % sizeof(T));
-    const size_t MAX_NUM_OBJ = MEMORY_2GB / sizeof(T);
-    
-    int getFirstUnoccupied() const noexcept {
-        for (int i = 0; i < MAX_NUM_OBJ; i++) {
-            if (getOcupied(i)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    //--------------------------------------------------------------
-    inline void setOcupied(int ind, OcupiedStatus status) noexcept {
-        ocupiedFlags[ind] = status;
-    }
-
-    inline OcupiedStatus getOcupied(int ind) const noexcept {
-        return ocupiedFlags[ind];
-    }
-    //--------------------------------------------------------------
-
-    GoofyAhhAllocator& operator=(const GoofyAhhAllocator& other) = delete;
-    GoofyAhhAllocator(const GoofyAhhAllocator& other) = delete;
-}; 
-//----------------------------------------------------------------------------
-
-// std::vector
-#include <exception>
-#include <memory>
-#include <iostream>
-
-template<class T, class Alloc = std::allocator<T>>
-class vectorCppLess11 {
-public:
-    vectorCppLess11() 
-    :
-    m_size(0),
-    m_capacity(16)
-    {
-        arr = traits::allocate(alloc, m_capacity);
-    }
-
-    vectorCppLess11(const vectorCppLess11<T, Alloc>& v) 
-    :
-    m_size(v.m_size),
-    m_capacity(v.m_capacity),
-    alloc(
-        traits::select_on_container_copy_consruciont(v.alloc) // возвращает, нужный аллокатор (новый или тот же из старого вектора)
-    )
-    {
-        arr = traits::alloacate(alloc, m_capacity);
-        for (int i = 0; i < m_size; i++) {
-            traits::construct(alloc, arr+i, v.arr[i]);
-        }
-    }
-
-    void push_back(const T& x) {
-        if (m_size >= m_capacity) {
-            reserve(m_capacity << 1);
-        }
-        traits::construct(alloc, arr+m_size, x);
-        m_size++;
-    }
-
-    size_t size() {
-        return m_size;
-    }  
-
-    size_t capacity() {
-        return m_capacity;
-    }
-
-    void shrink_to_fit() {
-        // сокращает capacity до size    
-    }
-
-    void resize(size_t size, T value = T()) {
-        // меняет размер
-        // новые элементы инициализируются значением
-    }
-
-    void swap(const vectorCppLess11<T, Alloc> other) {
-        // меняет местами вектора
-    }
-
-    T& operator[](size_t i) {
-        return arr[i];
-    }
-
-    const T& operator[](size_t i) const {
-        return arr[i];
-    }
-    
-    T& at(size_t ind) {
-        if (m_size <= ind) {
-            throw std::out_of_range;
-        }
-        return arr[ind];
-    }
-
-    const T& at(size_t ind) const {
-        if (m_size <= ind) {
-            throw std::out_of_range;
-        }
-        return arr[ind];
-    }
-
-    template<class ... Args>
-    void emplace_back(const Args& ... args) {
-        push_back(T(args...));
-    }
-
-private:
-    size_t m_size;
-    size_t m_capacity;
-    T* arr;
-    Alloc alloc;
-
-    using traits = std::allocator_traits<Alloc>;
-
-    void reserve(size_t newCapacity) {
-        T* newArr = traits::allocate(alloc, newCapacity);
-        for (int i = 0; i < m_size; i++) {
-            traits::construct(alloc, newArr+i, arr[i]);
-            traits::destroy(alloc, arr+i);
-        }
-        traits::deallocate(alloc, arr, m_capacity);
-        arr = newArr;
-        m_capacity = newCapacity;
-    }
-};
-
-
-//------------------------------------------------------
-template<class T>
-struct Node {
-public:
-    Node(const T& val) : m_val(val) {}
-
-    inline T& val() {
-        return m_val;
-    } 
-
-    inline void setVal(const T& val) {
-        this->m_val = val;
-    }
-
-    inline Node<T>* prev() {
-        return m_prev;
-    }
-
-    inline void setPrev(Node<T>* prev) {
-        m_prev = prev;
-    }
-
-    inline Node<T>* next() {
-        return m_next;
-    }
-
-    inline void setNext(Node<T>* next) {
-        m_next = next;
-    }
-
-private:
-    T m_val;
-    Node<T>* m_prev = nullptr;
-    Node<T>* m_next = nullptr;
-};
-
-template<class T, class Alloc = std::allocator<Node<T>>>
-class List {
-public:
-    using type_name = T;
-
-    void append(const T& val) {
-        Node<T>* prev;
-        if (m_size == 0) {
-            start = traits::allocate(alloc, 1);
-            end = start;
-            prev = nullptr;
-        } else {
-            end->setNext(traits::allocate(alloc, 1));
-            prev = end;
-            end = end->next();
-        }
-        traits::construct(alloc, end, val);
-        end->setPrev(prev);
-
-        m_size++;
-    } 
-
-    T& at(int i) {
-        if (m_size <= i) {
-            throw std::out_of_range("List::at() index out of range");
-        }
-        Node<T>* cur = start;
-        for (int j = 0; j < i; j++) {
-            cur = cur->next();
-        }
-        return cur->val();
-    }
-
-    size_t size() const {
-        return m_size;
-    }
-
-
-    void remove_at_end() {
-        if (m_size == 0) {
-            throw std::out_of_range("List::remove_at_end empty list");
-        }
-        Node<T>* prev = end->prev();
-        traits::destroy(alloc, end);
-        traits::deallocate(alloc, end, 1);
-        end = prev;
-        m_size--;
-        if (m_size == 0) {
-            start = end;
-        } else {
-            end->setNext(nullptr);
-        }
-    } 
-
-
-
-private:
-    using traits = std::allocator_traits<Alloc>;
-    Node<T>* start = nullptr;
-    Node<T>* end = nullptr;
-    Alloc alloc;
-    size_t m_size = 0;
-};
-
-
-int main() {
-    List<int> list;
-    for (int i = 0; i < 10000000; i++) {
-        list.append(i);
-    }
-    for (int i = 0; i < 10000000; i++) {
-        list.remove_at_end();
-    }
-
-    cout << list.size();
-    
-
-}
-
 //----------------------------------------------------------------------------
 // Итераторы
 
@@ -1811,177 +1507,6 @@ int main() {
 
 }  
 
-
-//----------------------------------------------------------------------------
-template<
-    class Key, 
-    class T, 
-    class Comp = std::less<Key>,
-    class Alloc = std::allocator<std::pair<const Key, T>>
->
-class MyMap {
-public:
-    using key_type = Key;
-    using mapped_type = T;
-    using value_type = std::pair<const Key, T>;
-    using allocator_type = Alloc;
-    using reference = value_type&;
-
-    T& operator[](const Key& key) {
-        Node* g = m_get(root, key);
-        if (g == nullptr) {
-            root = m_put(root, key, T());
-            g = m_get(root, key);
-        }
-        return g->val;
-    }
-
-    size_t size() const {
-        return m_size(root);
-    }
-
-    void del(const Key& key) {
-        root = m_delete(root, key);
-    }
-
-    bool contain(const Key& key) const {
-        return m_contain(root, key);
-    }
-
-private:
-
-    //----------------------------------------
-    struct Node {
-        Node(const Key& key, const T& val) 
-        : 
-        vt(key, val),
-        key(vt.first),
-        val(vt.second) 
-        {}
-
-        value_type vt;
-        const Key& key;
-        T& val;
-        Node* prev = nullptr;
-        Node* left = nullptr;
-        Node* right = nullptr;
-    }* root = nullptr;
-    //----------------------------------------
-
-    using NodeAlloc = typename Alloc::template rebind<Node>::other;
-    using traits = std::allocator_traits<NodeAlloc>;
-    
-    Comp comp;
-    NodeAlloc nodeAlloc;
-
-    bool m_contain(const Node* x, const Key& key) const {
-        if (x == nullptr) {
-            return false;
-        }
-        if (comp(key, x->key)) {
-            return m_contain(x->left, key);
-        } else if (comp(x->key, key)) {
-            return m_contain(x->right, key);
-        } else {
-            return true;
-        }
-    }
-
-    Node* m_put(Node* x, const Key& key, const T& val) { 
-        if (x == nullptr) {
-            Node* n = traits::allocate(nodeAlloc, 1);
-            traits::construct(nodeAlloc, n, key, val);
-            return n;
-        } else if (comp(key, x->key)) {
-            x->left = m_put(x->left, key, val);
-        } else if (comp(x->key, key)) {
-            x->right = m_put(x->right, key, val);
-        } else {
-            x->val = val;
-        }
-        return x;
-    }
-
-    Node* m_get(Node* x, const Key& key) {
-        if (x == nullptr) {
-            return nullptr;
-        }
-        if (comp(key, x->key)) {
-            return m_get(x->left, key);
-        } else if (comp(x->key, key)) {
-            return m_get(x->right, key);
-        } else {
-            return x;
-        }
-    }
-
-    Node* m_min(Node* x) {
-        if (x == nullptr) {
-            return nullptr;
-        }
-        if (x->left != nullptr) {
-            return m_min(x->left);
-        }
-        return x;
-    }
-
-    Node* m_max(Node* x) {
-        if (x == nullptr) {
-            return nullptr;
-        }
-        if (x->right != nullptr) {
-            return m_max(x->rigth);
-        }
-        return x;
-    }
-
-    size_t m_size(const Node* x) const {
-        if (x == nullptr) {
-            return 0;
-        }
-        return m_size(x->left) + m_size(x->right) + 1;
-    }
-
-    Node* m_deleteMin(Node* x) {
-        if (x->left == nullptr) {
-            return x->right;
-        }
-        x->left = m_deleteMin(x->left);
-        return x;
-    }
-
-    Node* m_delete(Node* x, const Key& key) {
-        if (x == nullptr) {
-            return nullptr;
-        }
-        if (comp(key, x->key)) {
-            x->left = m_delete(x->left, key);
-        } else if (comp(x->key, key)) {
-            x->right = m_delete(x->right, key);
-        } else {
-            if (x->right == nullptr) {
-                Node* left = x->left;
-                traits::destroy(nodeAlloc, x);
-                traits::deallocate(nodeAlloc, x, 1);
-                return left;
-            } 
-            if (x->left == nullptr) {
-                Node* right = x->right;
-                traits::destroy(nodeAlloc, x);
-                traits::deallocate(nodeAlloc, x, 1);
-                return right;
-            }
-            Node* tmp = x;
-            x = m_min(tmp->right);
-            x->right = m_deleteMin(tmp->right);
-            x->left = tmp->left;
-            traits::destroy(nodeAlloc, tmp);
-            traits::deallocate(nodeAlloc, tmp, 1);
-        }
-        return x;
-    }
-};
-
 //----------------------------------------------------------------------------
 // iterator_traits
 template<class Iter>
@@ -2040,8 +1565,6 @@ int main() {
 
     std::copy(in.begin(), in.end(), out);
 
-    
-
     std::ifstream inputFile("t.txt"); 
 
     std::istream_iterator<char> beginFile(inputFile), endFile;
@@ -2050,13 +1573,206 @@ int main() {
         cout << *c;
     }
     inputFile.close();
+}  
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//-------------------------------move семантика-------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+template<class T>
+T&& move(T& v) {
+    return static_cast<T&&>(v);
+}
+
+struct S {
+    std::vector<int> v;
+    int i;
+    int* arr;
+
+    S() = default;
+    S(const S&) = default;
+    S& operator=(const S& other) = default;
 
 
+    // перемещающий конструктор 
+    S(S&& other): 
+        v(std::move(other.v)),
+        i(other.i),
+        arr(other.arr)
+    {
+        other.arr = nullptr;
+    }
+
+    // перемещающий оператор присваивания
+    S& operator=(S&& other) {
+        v = std::move(other.v);
+        arr = other.arr;
+        other.arr = nullptr;
+        i = other.i;
+    }
+}; 
+
+int main() {
+    S s;
+    S s2(s);
+}  
+
+
+//----------------------------------------------------------------------------
+struct S {
+    int i = 1; 
+};
+
+void foo(S& s) {
+    cout << "lvalue" << endl;
+} 
+void foo(S&& s) {
+    cout << "rvalue" << endl;
+}
+
+int main() {
+    S s;
+    foo(false ? S() : s); // каст к rvalue
+    foo(true ? S() : s);  // каст к rvalue
+
+    /*
+        PS D:\eduCpp\build\Debug> ."D:/eduCpp/build/Debug/eduCpp.exe"
+        rvalue
+        rvalue
+    */
 }  
 
 
 
+//----------------------------------------------------------------------------
+struct S {
+    int i = 1; 
+    S() {
+        cout << "S()" << endl;
+    };
+    S(const S& s) : i(s.i) {
+        cout << "S(const S& s)" << endl;
+    } 
+    S(S&& s) : i(s.i){  
+        cout << "S(S&& s)" << endl;
+    }
+};
 
+S foo() {
+    S s;
+    return s;
+}
+
+int main() {
+    S s = foo(); // move construct 
+}  
+
+
+//----------------------------------------------------------------------------
+//rvalue ref. propertes
+int main() {
+    int x = 5;
+    // int&& y = x;  запрещенно не явное преобразрование lvalue в rvalue
+    int&& y = std::move(x);
+
+    // int&& z = y; запрещено
+
+    int& z = y; // rvalue-ref to lvalue-ref
+
+    const int& t =  std::move(y); 
+
+    const int&& u = std::move(t);
+
+    int&& t1 = 5;
+    t1++;
+
+    cout << t1 << endl;
+
+}  
+
+//----------------------------------------------------------------------------
+// реализация std::move
+
+template<typename T>
+void func(T&& arg) {
+    // T&& - universal reference 
+}
+
+template<typename T>
+std::remove_reference_t<T>&& move(T&& x) {
+    return static_cast<std::remove_reference_t<T>&&>(x);
+}
+
+
+//----------------------------------------------------------------------------
+// perfect forward #include <type_traits>
+// переменные имеют имена, и все именованные переменные являются lvalue.
+
+template<typename T>
+T&& forward(std::remove_reference_t<T>& x) {
+    // x - всегда lvalue
+    return static_cast<T&&>(x); 
+}
+
+template<class T, class... Args> 
+// в зависимости от типа args это будет коставаться либо к && либо к &
+void construct(T* p, Args&& ... args) { //allocator::
+	new(p) T(std::forward<Args>(args)...);
+}
+
+//----------------------------------------------------------------------------
+// copy elision
+struct S {
+    int* arr = new int[10];
+    S() {
+        cout << "S()" << endl;
+    }
+
+    S(const S&) {
+        cout << "S(const S&)" << endl;
+    }
+
+    S(S&&) {
+        cout << "S(S&&)" << endl;
+    }
+
+    S& operator=(S&&) {
+        cout << "S& operator=(S&&) " << endl;
+        return *this;
+    }
+
+    S& operator=(const S&) {
+        cout << "S& operator=(const S&) " << endl;
+        return *this;
+    }
+
+    const S operator+(const S& other) {
+        S s;
+        memcpy(s.arr, arr, 10);
+        for (int i = 0; i < 10; i++) {
+            s.arr[i] += other.arr[i];
+        }
+        return s;
+    }
+};
+
+
+// unamed return value optimization
+S urvo() {
+    return S();
+}
+
+// named return value optimization
+S nrvo() {
+    S s;
+    return s;
+}
+
+int main() {
+    S s = S(); 
+    S s2 = urvo(); 
+}
 
 
 
@@ -2140,7 +1856,6 @@ struct A {
 
     void bar() {
         A::foo(); 
-        // foo() -> B::foo()
         // при вызове bar()->B::foo() в конструкторе - ub. 
     }
 
