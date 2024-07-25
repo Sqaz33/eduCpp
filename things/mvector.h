@@ -119,9 +119,20 @@ private:
 
     void reserve(size_t newCapacity) {
         T* newArr = traits::allocate(alloc, newCapacity);
-        for (int i = 0; i < m_size; i++) {
-            traits::construct(alloc, newArr+i, std::move_if_noexcept(arr[i]));
+        for (size_t i = 0; i < m_size; i++) {
+            try {
+                traits::construct(alloc, newArr+i, std::move_if_noexcept(arr[i]));
+            } catch(...) {
+                for (size j = 0; j < i; j--) {
+                    traits::destroy(newarr+i);
+                }
+                throw;
+            }
             traits::destroy(alloc, arr+i);
+        } 
+
+        for (size_t i = 0; i < m_size; i++) {
+            traits::desroy(alloc, arr+i, 1);
         }
         traits::deallocate(alloc, arr, m_capacity);
         arr = newArr;

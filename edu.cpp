@@ -1699,6 +1699,8 @@ void func(T&& arg) {
     // T&& - universal reference 
 }
 
+auto&& z = r; // universal ref
+
 template<typename T>
 std::remove_reference_t<T>&& move(T&& x) {
     return static_cast<std::remove_reference_t<T>&&>(x);
@@ -1774,12 +1776,65 @@ int main() {
     S s2 = urvo(); 
 }
 
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//-------------------------------auto-----------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+auto f(int x) {
+    if (x > 0) {
+        return 0;
+    }
+    return 1;
+    // для вывода auto oreturn должен иметь 1 тип    
+}
 
 
+auto f(auto  x) { // c++ 20
+
+}
+
+int main() {
+    int x = 1;
+    int& y = x;
+
+    auto r = y; // auto = int, правила, такие же, как и при передачи в шаблонную функцию
+
+    auto&& z = r; // universal ref
+    z = 2;
+    cout << x << endl;
 
 
+    std::vector<bool> v;
+    auto b = v[0]; // vb-ref, лучше так не делать
+
+    cout << typeid(b).name() << endl;
+}  
 
 
+//----------------------------------------------------------------------------
+//decltype
+int main() {
+    int x = 5;
+    decltype(x) y = 5;
+
+    int& r = x;
+    decltype(r) z = x;
+    z++;
+    cout << z << endl;
+
+    decltype(++x) /*выражение не вычисляется*/ b = x;
+    // навесит & если выражение lvalue
+    b = 10;
+
+    cout << b << endl;
+
+    // decltype((S().m)) v = x;
+    // не скомпилируется слева int&&
+    decltype((S().m)) v = std::move(x);
+
+
+}  
 
 
 
@@ -1871,3 +1926,5 @@ struct B : A {
 
     }
 };
+
+
