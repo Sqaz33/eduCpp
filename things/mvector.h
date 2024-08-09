@@ -105,8 +105,8 @@ public:
     }
 
     template<class ... Args>
-    void emplace_back(const Args& ... args) {
-        push_back(T(args...));
+    void emplace_back(Args&& ... args) {
+        push_back(T(std::forward(args)...));
     }
 
 private:

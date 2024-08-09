@@ -2016,38 +2016,34 @@ int main() {
 //----------------------------------------------------------------------------
 //shared_ptr указатель с разделяемым владением
 
-void f(auto p) {
-    std::cout << p.get() << "\n";
-}
+template <class T>
+class MVPSharedPtr;
 
-int main() { 
-    std::shared_ptr<int> p(new int(5));
-
-    auto pp = p;
-
-    f(p);
-
-    f(std::move(pp));
-
-    pp = std::move(p)
-}
+template <typename T, typename ... Args> 
+MVPSharedPtr<T> makeShared(Args&& ... args);
 
 template <class T>
 class MVPSharedPtr {
 public:
     MVPSharedPtr(T* ptr) : 
-        ptr(ptr),
-        count(new int(0))
-    {}
+        count(new size_t(0))
+    {
+        this->ptr = new ControlBlock();
+        this->ptr->ptr = ptr;
+    }
 
     MVPSharedPtr(const MVPSharedPtr& other) :
         ptr(other.ptr),
         count(other.count)
     {       
-        ++*count;
+        if (count) {
+            ++*count;
+        } else {
+            ++*(ptr->count);
+        }
     }   
-`
-    MVPSharedPtr(MVPSharedPtr&& other) noexpect :
+
+    MVPSharedPtr(MVPSharedPtr&& other) noexcept :
         ptr(other.ptr),
         count(other.count)
     {
@@ -2056,28 +2052,65 @@ public:
     }
 
     ~MVPSharedPtr() {
-        if (!count) return;
-
-        --*count;
-        if (*count == nullptr) {
-            delete ptr;
-            delete count;
+        int c = count ? --*count : --*(ptr->count);
+        
+        if (c == 0) {
+            ::operator delete(ptr);
+            delete (count);
         }
     }
 
+    T& operator*() {
+        return *(ptr->ptr);
+    }
+
+    T* operator->() {
+        return ptr->ptr;
+    }
+
+   template<typename T, typename ... Args>
+   friend MVPSharedPtr<T> makeShared(Args&& ... args);
 private:
-    T* ptr;
-    int* count;
-
-    void foo() {
-        if (*count) {
-            --*count;
-            return;
+    struct ControlBlock {
+        T* ptr;
+        size_t* count;
+        ~ControlBlock() {
+            ::operator delete(static_cast<void*>(ptr));
         }
-        delete ptr;
-    }
+    }* ptr;
+
+    size_t* count;
+
+
+    MVPSharedPtr(ControlBlock* control) : 
+        ptr(control), 
+        count(nullptr)
+    {}
 };
 
+template<typename T, typename ... Args>
+MVPSharedPtr<T> makeShared(Args&& ... args) {
+    void* ptr = ::operator new(sizeof(T) + sizeof(size_t));
+    new(static_cast<T*>(ptr)) T(std::forward<Args>(args)...);
+    new(static_cast<void*>(static_cast<T*>(ptr) + 1)) size_t(1);
+
+    auto* block = new MVPSharedPtr<T>::ControlBlock();
+    block->ptr = static_cast<T*>(ptr);
+    block->count = reinterpret_cast<size_t*>(static_cast<T*>(ptr) + 1);
+    return MVPSharedPtr<T>(block);
+}
+
+template<typename T, typename ... Args>
+MVPSharedPtr(T, Args...) -> MVPSharedPtr<T>;
+
+int main() { 
+    auto sp = makeShared<int>(1);
+    std::cout << *sp << std::endl;
+
+    auto sp2(sp);
+
+    std::cout << *sp2 << std::endl;
+}
 
 
 
