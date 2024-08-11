@@ -2022,6 +2022,7 @@ class MVPSharedPtr;
 template <typename T, typename ... Args> 
 MVPSharedPtr<T> makeShared(Args&& ... args);
 
+// не работает
 template <class T>
 class MVPSharedPtr {
 public:
@@ -2088,6 +2089,7 @@ private:
     {}
 };
 
+// не работает
 template<typename T, typename ... Args>
 MVPSharedPtr<T> makeShared(Args&& ... args) {
     void* ptr = ::operator new(sizeof(T) + sizeof(size_t));
@@ -2115,61 +2117,46 @@ int main() {
 
 
 
+//----------------------------------------------------------------------------
+// enable_shared_from_this
+template <class T>
+class enable_shared_from_this {
+    weak_ptr<T> wp;
+
+    shared_ptr<T> shared_from_this() const {
+        return wp.lock();
+    }
+};
+
+struct S : protected std::enable_shared_from_this<S> {
+    int i;
+    
+    std::shared_ptr<S> getThis() {
+        return shared_from_this();
+    }
+};
 
 
+ 
+int main() {   
+    SetConsoleOutputCP(CP_UTF8); 
+    auto sps = std::make_shared<S>();
+    auto sps2 = sps->getThis();
+}
 
 
+//----------------------------------------------------------------------------
+// allocate_shared
+template<class T, class Alloc, class ... Args>
+std::shared_ptr<T> allocate_shared(Alloc alloc, Args&& ... args) {
 
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+int main() { 
+    SetConsoleOutputCP(CP_UTF8); 
+    
+    auto sp = std::allocate_shared<int>(std::allocator<int>(), 1);
+}
 
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
@@ -2213,3 +2200,46 @@ struct Derived : Base {
         cout << "Derived::foo()" << endl; 
     }
 };
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//-------------------------------лямда функции--------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//this capturing
+struct S {
+    int i = 1;
+    auto foo() {
+        return [this]() {return i;};
+    }
+};
+
+int main() { 
+    SetConsoleOutputCP(CP_UTF8); 
+    std::vector v = {1, 2, 3, 4};
+    auto l = [](int a, int b) -> bool {return a < b;}; // lambda-function 
+    // l - closure
+
+    std::map<int, int, decltype(l)> m(l); 
+
+    //capturing
+    int c = 1;
+    auto l2 = [&c](int a, int b) -> bool {
+        return a > b + c;
+    };
+
+    //capturing
+    auto l3 = [&, c](int a, int b) -> bool {
+        return a > b + c;
+    };
+
+    auto l4 = [=, &c](int a, int b) -> bool {
+        return a > b + c;
+    };
+
+    S s;
+    auto l5 = s.foo();
+    std::cout << l5() << std::endl;
+}
+
