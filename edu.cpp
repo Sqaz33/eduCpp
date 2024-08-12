@@ -2195,7 +2195,7 @@ void Base::foo() {
     cout << "Base::foo()" << endl;
 } 
 
-struct Derived : Base {
+struct Derived : Base { 
     void foo() override { 
         cout << "Derived::foo()" << endl; 
     }
@@ -2243,3 +2243,209 @@ int main() {
     std::cout << l5() << std::endl;
 }
 
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//--------------------------type erasure and unions---------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+//std::any
+int main() {
+
+    std::vector v = {1, 2, 3};
+    std::any a = v;
+
+    a = std::string("1234");
+
+    // приведение к типу
+    auto str = std::any_cast<std::string>(a);
+    // бросает исключение bad_any_cast, если неверный тип
+}
+
+
+class any {
+public:
+    template <class T> 
+    any(const T& value) :
+        ptr(new Derived(value))
+    {} 
+
+    template <class T>
+    any& operator=(const T& value) {
+        delete ptr;
+        ptr = new Derived(value);
+        return *this;
+    }
+
+    any& operator=(const any& other) {
+        delete ptr;
+        ptr = other.ptr->copy();
+        return *this;
+    }  
+
+    template <class T> 
+    friend T& any_cast(any& a);     
+
+
+private:
+    struct Base {
+        virtual ~Base() = default;
+        virtual Base* copy() const = 0;
+    }* ptr;
+
+    template <typename T>
+    struct Derived : Base {
+        T obj;
+        Derived(const T& obj) : obj{obj} {} 
+        Derived(const Derived<T>& other) : obj(other.obj) {}
+        Base* copy() const override {
+            return new Derived<T>(*this);
+        }
+    };
+
+};
+
+template <class T>
+T& any_cast(any& a) {
+    return 
+        static_cast<T&>(dynamic_cast<any::Derived<T>*>(a.ptr)->obj);
+}
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//------------------------------------union-----------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+// union
+int main() {
+    union U {
+        int x;
+        char c;
+        double d;
+        std::string str;
+
+        U(const std::string& s) : str(str) {}
+        U(int x) : x(x) {}
+        U() {};
+        ~U() {};
+    } u;
+
+    u.x = 1; // теперь x - активный член
+    // u.str = std::string("1234") - ub
+
+    new(&u.str) std::string("1234");
+
+    std::cout << u.str << '\n';
+
+    u.str.~basic_string();
+}
+
+//template union
+template <class T>
+union TemplateUnion {
+    T v;
+};
+
+int main() {
+    TemplateUnion<int> t;
+}
+
+
+// анонимный union
+int main() {
+    union {
+        int a;
+        const char* p;
+    }
+    // объекты анонимного union шэйрят одну и ту же память
+}
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//--------------------------------std::function-------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+int main() {
+    std::function<int (int, int)> l = [](int a, int b) {return a + b;};
+
+}
+
+// mvp реализация
+namespace myfunc {
+    template <class ... Types>
+    class function;
+
+    template <class Res, typename ... Args>
+    class function<Res(Args...)> {
+    public:
+        template <class F>
+        function(const T& f) :
+            f(new Derived<F>(f)) 
+        {}
+
+        ~function() {
+            delete f;
+        }
+
+        function(const function& other) :
+            f(other.f->copy()) 
+        {}
+
+    private:
+        struct Base {
+            virtual Base* copy() = 0;
+            virtual Res operator()(Args...) = 0;
+            virtual ~Base() = default;
+        };
+
+        template <class Functor>
+        struct Derived : Base {
+            Functor f;
+
+            Derived(const Functor& f) : f(f) {}
+
+            Derived(const Derived<Functor>& other) : f(other.f) {}
+
+            Res operator()(Args&& ... args) override {
+                return f(std::forward<Args>(args));
+            }
+
+            Base* copy() const override {
+                return new Derived<Functor>(*this);
+            }
+
+            ~Derived() {}
+        }
+            
+        private: 
+            Base* f;
+    };
+}
+
+
+
+
+
+
+
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//--------------------------------nullptr-------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+void foo(int) {}
+void foo(int*) {}
+
+int main() {
+
+    foo(NULL);      // foo(int)
+    foo(nullptr);   // foo(int*)
+}
