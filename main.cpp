@@ -11,6 +11,9 @@ struct integral_constant {
 using true_type = integral_constant<bool, true>;
 using false_type = integral_constant<bool, false>;
 
+template <bool B>
+using bool_constant = integral_constant<bool, B>;
+
 // is_same
 template <class T, class U>
 struct is_same : false_type {};
@@ -114,30 +117,58 @@ void bar(const C&) {
 }
 
 // is_class_or_union
+template <class T, class U = int T::*>
+constexpr bool is_class_or_union_helper(int) { return true; }
+
 template <class T>
-struct is_class_or_union {
-    static constexpr bool value = std::conditional_t<bool(std::is_class_v<T>), true_type, 
-                                             std::conditional_t<bool(std::is_union_v<T>), true_type, false_type>
-                                             >::value;
-};
+constexpr bool is_class_or_union_helper(...) { return false; }
+
+template <class T>
+struct is_class_or_union : bool_constant<is_class_or_union_helper<T>(1)> { };
 
 template <class T>
 constexpr bool is_class_or_union_v = is_class_or_union<T>::value;
 
+//-----------------------------
+// compile-time check of method presence in a class
+template <class T, class... Args>
+constexpr decltype(T().construct(Args()...), bool()) has_metod_construct_helper(int) {
+    return true;
+}
+
+template <class T, class... Args>
+constexpr bool has_metod_construct_helper(...) {
+    return false;
+}
+
+template <class T, class... Args>
+struct has_method_construct :
+    bool_constant<has_metod_construct_helper<T, Args...>(int())>
+{};
+
+template <class T, class... Args>
+constexpr bool has_method_construct_v = has_method_construct<T, Args...>::value;
+
+struct st {
+    st() {}
+    void construct(int) {}
+};
 
 int main() {
     // std::cout << is_pointer_v<int*> << ' ' << is_pointer_v<int> << '\n';
     // std::cout << std::conjunction_v<std::bool_constant<true>>;
 
-    class S {int x;} s;
+    // class S {int x;} s;
     // foo(s); // << 1
     // foo(1); // << 2
     
-    bar(1);
-    bar(s);
-    union v {};
-    std::cout << is_class_or_union_v<S> << ' '   // << 1
-              << is_class_or_union_v<int> << ' ' // << 0
-              <<is_class_or_union_v<v> << '\n'; //  << 1
+    // bar(1);
+    // bar(s);
+    // union v {};
+    // std::cout << is_class_or_union_v<S> << ' '   // << 1
+    //           << is_class_or_union_v<int> << ' ' // << 0
+    //           <<is_class_or_union_v<v> << '\n'; //  << 1
 
+    std::cout << has_method_construct_v<st, int> << ' '
+              << has_method_construct_v<st, int, int> << '\n';
 }
