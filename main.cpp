@@ -1,5 +1,6 @@
 #include <iostream>
 #include <type_traits>
+#include <variant>
 
 
 // const metafunction 
@@ -22,7 +23,7 @@ template <class T>
 struct is_same<T, T> : true_type {};
 
 template <class T, class U>
-constexpr bool is_same_v = is_same<T, T>::value;
+constexpr bool is_same_v = is_same<T, U>::value;
 
 //-----------------------------
 //type identity
@@ -41,7 +42,7 @@ template <class T>
 struct remove_reference<T&&> : type_identity<T> {};
 
 template <class T>
-using remove_reference_t = remove_reference<T>::type;
+using remove_reference_t = typename remove_reference<T>::type;
 
 //-----------------------------
 template <class T>
@@ -102,6 +103,22 @@ template <bool B, typename T>
 using enable_if_t = typename enable_if<B, T>::type; 
 
 
+// conditional
+template <bool B, class T, class U>
+struct conditional :
+    type_identity<T>
+{};
+
+template <class T, class U>
+struct conditional<false, T, U> :
+    type_identity<U>
+{};
+
+template <bool B, class T, class U>
+using conditional_t = typename conditional<B, T, U>::type;
+
+
+// example
 template <class C, 
           enable_if_t<std::is_class_v<C>, bool> = true
          >
@@ -131,15 +148,21 @@ constexpr bool is_class_or_union_v = is_class_or_union<T>::value;
 
 //-----------------------------
 // compile-time check of method presence in a class
+
+//declval
+template <class T>
+std::add_rvalue_reference_t<T> declval() noexcept;
+
+
+
 template <class T, class... Args>
-constexpr decltype(T().construct(Args()...), bool()) has_metod_construct_helper(int) {
-    return true;
-}
+constexpr decltype(declval<T>().construct(declval<Args>()...), bool()) 
+has_metod_construct_helper(int) { return true; }
 
 template <class T, class... Args>
 constexpr bool has_metod_construct_helper(...) {
     return false;
-}
+} 
 
 template <class T, class... Args>
 struct has_method_construct :
@@ -149,10 +172,132 @@ struct has_method_construct :
 template <class T, class... Args>
 constexpr bool has_method_construct_v = has_method_construct<T, Args...>::value;
 
-struct st {
-    st() {}
+//-----------------------------
+// constructible
+
+template <class T, class... Args>
+constexpr decltype(T(declval<Args>()...), bool())
+is_constructible_helper(int) { return true; }
+
+template <class T, class... Args>
+constexpr bool is_constructible_helper(...) { return false; }
+
+template <class T, class... Args>
+struct is_constructible :
+    bool_constant<is_constructible_helper<T, Args...>(0)>
+{};
+
+template <class T, class... Args>
+constexpr bool is_constructible_v = is_constructible<T, Args...>::value;
+
+
+
+// is_copy_constructible
+template <class T>
+using is_copy_constructible = is_constructible<T, const T&>; 
+
+template <class T>
+constexpr bool is_copy_constructible_v = is_copy_constructible<T>::value;
+
+
+// is_move_constructible
+template <class T>
+using is_move_constructible = is_constructible<T, T&&>; 
+
+template <class T>
+constexpr bool is_move_constructible_v = is_move_constructible<T>::value;
+
+
+struct s { 
     void construct(int) {}
+    s() {}
+    s(int) {}
+    s(const s&) {}
+    s(s&&) noexcept {}
 };
+
+template <class T>
+struct is_nothrow_move_constructible_heplper :
+    bool_constant<noexcept(T(declval<T&&>()))>
+{};
+
+template <class T>
+struct is_nothrow_move_constructible : 
+    conjunction<is_move_constructible<T>, is_nothrow_move_constructible_heplper<T>>
+{};
+
+template <class T>
+constexpr bool is_nothrow_move_constructible_v = is_nothrow_move_constructible<T>::value;
+
+
+//----------------------------- 
+// move_if_noexcept
+template <class T>
+conditional_t<
+    is_nothrow_move_constructible_v<T>,
+    T&&,
+    T&
+> move_if_noexcept(T& x) noexcept{
+    return std::move(x);
+}
+
+
+//-----------------------------
+// is_base_of
+template <class B, class D>
+auto try_cast_to_base(B*) -> true_type;
+
+template <class B, class D>
+auto try_cast_to_base(...) -> false_type;
+
+template <class B, class D>
+auto is_base_of_helper(int) -> decltype(try_cast_to_base<B, D>(static_cast<D*>(nullptr)));
+ 
+template <class B, class D>
+auto is_base_of_helper(...) -> true_type;
+
+template <class B, class D> 
+struct is_base_of : 
+    conjunction<
+        std::is_class<B>,
+        std::is_class<D>,
+        decltype(is_base_of_helper<B, D>(int()))
+    > 
+{};
+
+template <class B, class D> 
+constexpr bool is_base_of_v = is_base_of<B, D>::value;
+
+
+struct B {};
+struct D : private B {};
+
+//-----------------------------
+// common_type
+template <class... Types>
+struct common_type;
+
+template <class First, class Second, class... Tail>
+struct common_type<First, Second, Tail...> : 
+    type_identity<
+        std::remove_reference_t< 
+            common_type<First, typename common_type<Second, Tail...>::type>
+        >
+    >
+{};
+
+template <class First, class Second>
+struct common_type<First, Second> : 
+    type_identity<decltype(true ? declval<First>() : declval<Second>())>
+{};
+
+template <class T>
+struct common_type<T> : type_identity<T> {};
+
+template <class... Types>
+using common_type_t = typename common_type<Types...>::type;
+
+void fff(void) {}
 
 int main() {
     // std::cout << is_pointer_v<int*> << ' ' << is_pointer_v<int> << '\n';
@@ -166,9 +311,24 @@ int main() {
     // bar(s);
     // union v {};
     // std::cout << is_class_or_union_v<S> << ' '   // << 1
-    //           << is_class_or_union_v<int> << ' ' // << 0
+    //           << is_class_or_union_v<int> << ' ' // << 0 
     //           <<is_class_or_union_v<v> << '\n'; //  << 1
 
-    std::cout << has_method_construct_v<st, int> << ' '
-              << has_method_construct_v<st, int, int> << '\n';
+    // std::cout << has_method_construct_v<st, int> << ' '          // << 1
+    //           << has_method_construct_v<st, int, int> << '\n';   // << 0
+
+    // std::cout << is_constructible_v<s, int> << '\n';  // << 1
+
+    // std::cout << is_move_constructible_v<s> << '\n';  // << 1
+
+    // std::cout << is_nothrow_move_constructible_v<s> << '\n'; // << 1;
+
+    // std::cout << typeid( declval<conditional_t<true, int, double>>() ).name() << S'\n';
+    // std::cout << is_base_of_v<B, D> << '\n'; // << 0
+    // std::cout << is_base_of_v<D, B> << '\n'; // << 0
+
+    // std::common_type_t<long, int, char> v = 1;
+
+
+
 }
