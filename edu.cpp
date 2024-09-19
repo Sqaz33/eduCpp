@@ -2886,3 +2886,199 @@ int main() {
 
     // std::common_type_t<long, int, char> v = 1;
 }
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//------------------------Constrains and concepts-----------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+// constrains
+// 15.7 requires keyword (since c++20) 
+
+// requires-clause
+template <class T>
+    requires requires(T x, T y) {x + y; x - y;}
+void f(T x) {
+    std::cout << 1 << '\n';
+}
+
+template <class T>
+void f(T x) {
+    std::cout << 2 << '\n';
+}
+
+// requires-operator
+template <class T>
+void g(T x) {
+    std::cout << requires(T t, T b) {
+        typename T::value_type;
+        t.size();
+        t + b;
+    } 
+    << '\n';
+}
+
+
+// 15.8 Concepts
+// list of requirements
+template <class T>
+concept Eq = requires (T x, T y) {x == y; x != y;};
+
+template <class T>
+    requires Eq<T>
+void ff(T x) {
+    std::cout << 1 << '\n';
+}
+
+template <class T>
+void ff(T x) {
+    std::cout << 2 << '\n';
+}
+
+// simple form
+template <Eq T>
+void fff(T x) { };
+
+template <class T>
+concept InputIterator = requires (T x) {++x; *x; x == x;};
+
+template <class T>
+concept UnaryPredicate = true;
+
+template <InputIterator Iter, UnaryPredicate Pred>
+Iter find_val(Iter begin, Iter end, Pred pred) {
+    for (; begin != end; ++begin) {
+        if (pred(*begin)) {
+            return begin;
+        }
+    }
+    return end;
+}
+
+struct S {};
+
+int main() {
+    // f(std::string()); << 1
+    // f(1); << 2
+    
+    // ff(1);  // << 1
+    // ff(S()); // << 2
+
+    // fff(1);
+
+    std::vector v = {1, 2, 3, 4};
+    std::cout << *find_val(v.begin(), v.end(), [](int val){return val == 3;}) << '\n';
+}
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------constexpr---------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+// 16.1 contexpr 
+constexpr int sqr(int x) {
+    return x * x;
+}
+
+// before c++11
+constexpr bool t() {return false;}
+
+// constexpr bool f() {throw 1; return 0;}
+
+// since c++14 
+constexpr bool isPrime(int n) {
+    if (n == 1) {
+        return false;
+    }
+    for (int d = 2; sqr(d) <= n; ++d) {
+        if (n % d == 0) {
+            return false;
+        }
+    }
+
+    if (n == INT_MAX) {
+        throw 1; 
+    }
+    return true;
+}
+
+//--------------------
+// 16.2 constexpr new and delete. constexpr vector and string (since c++20)
+constexpr int arraySum(int n) {
+    // int* a = new int[n];
+    std::vector<int> a(n);
+    for (size_t i = 0; i < n; ++i) a[i] = i;
+
+    int sum = 0;
+    for (size_t i = 0; i < n; ++i) sum += a[i];
+    
+    // delete[] a;
+    return sum;
+}
+
+//--------------------
+// 16.3 constexpr virtual function and dynamic_cast. (since c++20)
+
+struct Base {
+    constexpr Base() {}
+    constexpr virtual int f() {
+        return 1;
+    }
+    constexpr virtual ~Base() {}
+};
+
+struct Derived : Base {
+    constexpr Derived() {}
+    constexpr int f() override {
+        return 0;
+    }
+};
+
+constexpr int testVirtual() {
+    Base* pb = new Derived();
+    int ans = pb->f();
+    delete pb;
+    return ans;
+}
+
+// -O0
+constexpr bool isRuntime() {
+    return std::is_constant_evaluated();
+}
+
+constexpr int foo(int a, int b) {
+    return a + b;
+}
+
+
+// consteval
+// only comp. tyme function
+consteval auto cvalfoo() {
+    return 1;
+}
+
+int main() {
+    // constexpr bool is32_767prime = isPrime(32'767);
+    // std::array<int, sqr(5)> a;
+
+    // constexpr int a = arraySum(10);
+    // std::cout << a << '\n';
+
+    // constexpr int ans = testVirtual();
+
+    // constexpr bool runtime = isRuntime();
+
+    // std::cout << isRuntime() << ' ' << runtime << '\n';
+
+    //--------------------
+    // 16.4 const initialization, consteval, constinit (since c++23)
+    static constinit int c = foo(1, 2);
+
+    constexpr auto x = cvalfoo();   
+    // auto x = cvalfoo(); // CE
+}
