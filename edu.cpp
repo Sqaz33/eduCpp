@@ -3082,3 +3082,254 @@ int main() {
     constexpr auto x = cvalfoo();   
     // auto x = cvalfoo(); // CE
 }
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//---------------------------------typelist-----------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+// 16.5 Typelist metacontainer and value-based metaprogramming.
+
+// type base typelist
+
+// typelist
+template <typename... Ts>
+struct typelist {};
+
+
+// --------------------
+// front
+template <class... Ts>
+struct front;
+
+template <class T, class... Ts>
+struct front<typelist<T, Ts...>> : 
+    std::type_identity<T>
+{};
+
+template <class T, class... Ts>
+using front_t = typename front<T, Ts...>::type;
+
+
+// --------------------
+// push_front
+template <class... Ts>
+struct push_front;
+
+template <class T, class... Ts>
+struct push_front<T, typelist<Ts...>> : 
+    std::type_identity<typelist<T, Ts...>> 
+{};
+
+template <class List, class T>
+using push_front_t = typename push_front<T, List>::type;
+
+
+// -------------------
+// pop_front
+template <class... Ts>
+struct pop_front;
+
+template <class T, class... Ts>
+struct pop_front<typelist<T, Ts...>> : 
+    std::type_identity<typelist<Ts...>> 
+{};
+
+template <class T>
+using pop_front_t = typename pop_front<T>::type;
+
+
+// -------------------
+// back
+template <class... Ts>
+struct back;
+
+template <class T, class U>
+struct back<typelist<T, U>> :
+    std::type_identity<U>
+{};
+
+template <class T, class... Ts>
+struct back<typelist<T, Ts...>> : 
+    back<typelist<Ts...>>
+{};
+
+template <class... Ts>
+using back_t = typename back<Ts...>::type;
+
+
+// -------------------
+// excercise: push_front
+template <class... Ts>
+struct push_back;
+
+template <class T, class... Ts>
+struct push_back<T, typelist<Ts...>> :
+    std::type_identity<typelist<Ts..., T>>
+{};
+
+template <class List, class T>
+using push_back_t = typename push_back<T, List>::type;
+
+
+// -------------------
+// pop_back
+// template <class... Ts>
+// struct pop_back;
+
+// template <class T, class... Ts>
+// struct pop_back<typelist<Ts..., T>> :
+//     std::type_identity<typelist<Ts...>> 
+// {};
+
+// template <class List>
+// using pop_back_t = typename pop_back<List>::type;
+
+
+// -------------------
+// at
+
+template <size_t, class...>
+struct at;
+
+template <class Head, class... Tail>
+struct at<0, typelist<Head, Tail...>>  {
+    using type = Head;
+};
+
+template <size_t Index, class Head, class... Tail>
+struct at<Index, typelist<Head, Tail...>>  {
+    using type  = typename at<Index-1, typelist<Tail...>>::type;
+};
+
+template <class T, size_t Index>
+using at_t = typename at<Index, T>::type;
+
+
+int main() {
+    // static_assert(
+    //     std::is_same_v<
+    //         push_back_t<typelist<int, char>, double>,
+    //         typelist<int, char, double>
+    //     >
+    // );
+
+    // static_assert(
+    //     std::is_same_v<
+    //         pop_front_t<typelist<int>>,
+    //         typelist<>
+    //     >
+    // );
+
+
+    // static_assert(
+    //     std::is_same_v<
+    //         back_t<typelist<int, double, char>>,
+    //         char
+    //     >
+    // );
+
+    // static_assert(
+    //     std::is_same_v<
+    //         pop_back_t<typelist<int, double, char>>,
+    //         typelist<int, double>
+    //     >
+    // );
+
+    // static_assert(
+    //     std::is_same_v<
+    //         push_back_t<typelist<int, double>, char>,
+    //         typelist<int, double, char>
+    //     >
+    // );
+
+    // static_assert(
+    //     std::is_same_v<
+    //         at_t<typelist<int, double, char>, 1>,
+    //         double
+    //     >
+    // );
+
+
+}
+
+// constexpr based typelist
+template <class... Ts>
+struct typelist {};
+
+template <class... Ts, class ... Us>
+constexpr bool operator==(typelist<Ts...>, typelist<Us...>) { return false; }
+
+template <class... Ts>
+constexpr bool operator==(typelist<Ts...>, typelist<Ts...>) { return true; }
+ 
+template <class... Ts, class ... Us>
+constexpr bool operator!=(typelist<Ts...>, typelist<Us...>) { return true; }
+
+template <class... Ts>
+constexpr bool operator!=(typelist<Ts...>, typelist<Ts...>) { return false; }
+
+// front
+template <class T, class... Ts>
+constexpr typelist<Ts...> pop_front(typelist<T, Ts...>) {return {};}
+
+template <class T, class... Ts>
+constexpr typelist<T, Ts...> push_front(typelist<Ts...>) {return {};}
+
+// back
+template <class T, class... Ts>
+constexpr typelist<Ts..., T> push_back(typelist<Ts...>) {return {};}
+
+template <class T, class... Ts>
+constexpr bool constains(typelist<Ts...>) {
+    return (std::is_same_v<T, Ts> || ...);
+}
+
+// find
+template <class T, class... Ts>
+constexpr size_t find(typelist<Ts...>) {
+    bool bs[] = {std::is_same_v<T, Ts> ...};
+    return std::find(bs, bs + sizeof...(Ts), true) - bs;
+}
+
+template <template<class> class F, class... Ts>
+constexpr size_t find_if(typelist<Ts...>) {
+    bool bs[] = {F<Ts>::value...}; 
+    return std::find(bs, bs + sizeof...(Ts), true) - bs;
+}
+
+// at
+template <class T>
+struct at_helper;
+
+template <size_t... Indices>
+struct at_helper<std::index_sequence<Indices...>> {
+    template <class T>
+    static constexpr T dummy(decltype(Indices, (void*)nullptr)..., T*, ...);
+};
+
+template <size_t Index, typename... Ts>
+constexpr auto at(typelist<Ts...>) {
+    return std::type_identity <
+                decltype(at_helper<std::make_index_sequence<Index>>::dummy((Ts*)(nullptr)...))
+            >{};
+}
+
+int main() {
+    static_assert(pop_front(typelist<int, double, char>()) == typelist<double, char>());
+    static_assert(push_front<int>(typelist<double, char>()) == typelist<int, double, char>());
+    static_assert(push_back<int>(typelist<double, char>()) == typelist<double, char, int>());
+    // std::cout << find<double>(typelist<double, char, int, float>()) << '\n';
+    // std::cout << find_if<std::is_integral>(typelist<double, char, int, float>()) << '\n';
+
+    static_assert(
+        std::is_same_v<
+            decltype(at<2>(typelist<int, double, char>()))::type,
+            char
+        >
+    );
+
+}
