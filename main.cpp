@@ -1,8 +1,13 @@
 #include <iostream>
-#include <type_traits>
-#include <vector>
-#include <algorithm>
-#include <utility>
+
+struct S {
+    // operator int() {
+    //     return 0;
+    // }
+};
+
 int main() {
-    
+    S s;
+    auto x = int(s);
 }
+

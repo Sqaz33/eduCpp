@@ -131,9 +131,6 @@ private:
             traits::destroy(alloc, arr+i);
         } 
 
-        for (size_t i = 0; i < m_size; i++) {
-            traits::desroy(alloc, arr+i, 1);
-        }
         traits::deallocate(alloc, arr, m_capacity);
         arr = newArr;
         m_capacity = newCapacity;
