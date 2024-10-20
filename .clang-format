@@ -1,0 +1,16 @@
+---
+Language:        Cpp
+BasedOnStyle:    Google
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Empty
+PointerAlignment: Left
+ColumnLimit:     100
+SpacesBeforeTrailingComments: 1
+SortIncludes:    true
+IncludeBlocks:   Regroup
+AccessModifierOffset: -2
+SpaceBeforeParens: ControlStatements
+...
