@@ -714,17 +714,101 @@ constexpr size_t ilist_sz(std::initializer_list<T> intit) {
 
 
 
+//----------------------------------
+// constexpr virtual функции
+struct B { 
+    constexpr B() = default; 
+    virtual constexpr int data() const { return 1; }
+};
+
+struct D : B { 
+    constexpr D() = default;
+    constexpr int data() const override { return 2; }
+};
+
+
+consteval int foo() {
+    const B b;
+    const D d;
+    const B* bases[] = {&b, &d}; // псевдо стирание типов
+
+    return 
+        bases[0]->data()      // здесь
+        + bases[1]->data();   // нет вызова через vtable
+}
+
+
+int main() {
+    static constinit int x = foo();
+    std::cout << x << '\n';
+}
 
 
 
 
+//----------------------------------
+// Вариабельные суффиксы
+
+// default суффикс
+struct S {
+    int i;
+    friend std::ostream& operator<<(std::ostream& out, const S& s) {
+        return out << "int: " << s.i; 
+    }
+};
+
+S operator "" _s(unsigned long long arg) {
+    S s;
+    s.i = arg;
+    return s;
+}
+
+int main() {
+    std::cout << 1_s << '\n';
+}
+
+// Вариабельный суффикс
+template <class... Ts> 
+constexpr auto binparser(unsigned long long acc, char c, Ts... cs) {
+    unsigned digit = (c == '1') ? 1 :
+                     (c == '0') ? 0 : throw "out of range";
+
+    auto next = (acc << 1) + digit;
+    if constexpr (sizeof...(Ts) != 0) {
+        return binparser(next, cs...);
+    }
+    return next;
+}
+
+template <char... Chars>
+constexpr auto operator "" _bin() {
+    return binparser(0ull, Chars...);
+}
 
 
+// суффикс для строчки
+template <class... Ts> 
+constexpr auto tritparser(unsigned long long acc, const char* s, size_t len) {
+    char c;
+    int digit;
+    size_t pwd = len - 1;
+    while ((c = *s++)) {
+        digit = (c == 'j') ? -1 
+                         : (c == '0') ? 0 
+                         : (c == '1') ? 1 
+                         : throw "out of range";
+        acc += digit * std::pow(3, pwd--);
+    }
+    return acc;
+}
 
+constexpr auto operator "" _trit(const char *s, size_t len) {
+    return tritparser(0ull, s, len);
+}
 
-
-
-
+int main() {
+    std::cout << "10j01"_trit << '\n';
+}
 
 
 
