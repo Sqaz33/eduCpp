@@ -1,21 +1,13 @@
+#include <concepts>
 #include <iostream>
-#include <limits>
 
+template <std::signed_integral T>
+void foo(T) { std::cout << "signed\n"; }
 
-constexpr int f() {
-    if consteval {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
+template <std::unsigned_integral T>
+void foo(T) { std::cout << "unsigned\n"; }
 
 int main() {
-    constexpr int x = f();
-    int y = f();
-
-    std::cout << x << ' ' << y << '\n';
-
-
+    foo(1u);
+    foo(1);
 }
