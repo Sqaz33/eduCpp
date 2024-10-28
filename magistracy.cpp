@@ -857,7 +857,7 @@ requires(T t) {
     typename T::inner; // если есть вложенный тип [type]
 
     {*t} -> typename T::iner; // [compound]
-    {*t} -> convertible_to<typename T::inner /*, 2-ой аргумент будет подставленн сам */>; // [compound]
+    {*t} -> convertible_to<typename T::inner /*, 1-ый аргумент будет подставленн сам */>; // [compound]
 
     requires( noexcept(++t) ); // вычисляется [nested]
 } 
@@ -1063,3 +1063,147 @@ void sort(Sortable auto&);
 std::vector V;
 // ....
 std::input_iterator auto In = std::back_inserter(V);
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//--------------------------------кейсы Йосьюттиса----------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+class Customer {
+    std::string fst, snd;
+public:
+    template <class S1, class S2 = const char*> // для каждого аргумента по умолчанию - тип по умолчанию.
+        requires(
+            std::is_convertible_v<S1, std::string> && 
+            std::is_convertible_v<S2, std::string>
+        )
+    Customer(S1&& s1, S2&& s2 = ""): // universal ref
+        fst(std::forward<S1>(s1)), snd(std::forward<S2>(s2)) // perfect forwarding 
+    {}
+};
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------Вариабельные шаблоны----------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+//----------------------------------
+// Паттерны раскрытия
+
+// g(int(x), double(y));
+template <class... T> void g(T... args) {
+    f(args...); // -> f(x, y);
+    f(&args...); // -> f(&x, &y);
+    f(h(args)); // -> f(h(x), h(y));
+    f(const_cast<const Types*>(&args)...); // f(const_cast<const Types*>(x), ...
+}
+
+
+auto sum_all() { return 0; }
+
+template <class T, class... Ts>
+auto sum_all(T&& arg, Ts&&... args) {
+    return arg + sum_all(std::forward<Ts>(args)...);
+}
+
+
+//----------------------------------
+//вызов функции для каждого аргумента пака
+
+struct expand_t {
+    template <class... T> expand_t(T...) {}
+};
+
+template <class... T> void foo(T... ts) {
+    expand_t{(bar(ts), void(), 0)...}; // void() - блокировка user оператора ',' - запятая.
+}
+
+//----------------------------------
+// 2 пака
+template <class I, I... is1, I... is2>
+constexpr auto concat(std::integer_sequence<I, is1...>, std::integer_sequence<I, is2...>) { // пак типов несет на себе объекты
+    return std::integer_sequence<I, is1..., is2...>;
+}
+
+template <class I, I i1, I... is1>
+constexpr auto sum(std::integer_sequence<I, i1, is1...>) {
+    if constexpr(sizeof...(is1) != 0) {
+        return i1 + sum(std::integer_sequence<I, is1...>{});
+    }
+    return i1;
+}
+
+
+//----------------------------------
+// свертки (fold expression) 
+template <class T, class... Ts>
+void print(T&& arg, Ts&&... args) { 
+    std::cout << arg;
+    ((std::cout << ' ' << args), ...); 
+    std::cout << '\n';
+}
+
+// задачка
+template <class T> struct Node {
+    T data;
+    Node* left;
+    Node* right;
+};
+
+template <class T, class... Args>
+Node<T>* tree_get(Node<T>* root, Args... args) {
+    return (top ->* ... ->* args);
+}
+
+
+int main() {
+    auto left = &Node<int>::left;
+    auto right = &Node<int>::right;
+
+    // auto* res = tree_get(top, left, right);
+
+}
+
+
+//----------------------------------
+// Свертки с пустыми пачками
+// Операции для пустых пачек в свертках - ошибка, кроме ка
+
+// (... + args) -> bool = true
+// (... && args) -> bool = false
+// (..., args) = void
+
+
+
+namespace msa {
+
+template <class T, class... Ts>
+constexpr bool are_same_v = std::conjunction_v<std::is_same<T, Ts>...>;
+
+template <class... T>
+struct are_same : std::bool_constant<are_same_v<T...>> { };
+
+} // namespace issametypes
+
+
+template <class... Args>
+    requires msa::are_same_v<Args...>
+auto sum_all(Args&&... args) {
+    return (args + ...);
+}
+
+template <std::same_as<int>... Args>
+int sum_allInt32(Args&&... args) {
+    return (args + ...);
+} 
+
+int main() {   
+    std::cout << sum_allInt32(1, 2, 3, 4) << '\n';
+    std::cout << sum_all(1, 2, 3, 4, 1) << '\n';
+
+}

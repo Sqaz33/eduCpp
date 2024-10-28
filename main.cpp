@@ -1,13 +1,22 @@
 #include <concepts>
 #include <iostream>
+#include <utility>
 
-template <std::signed_integral T>
-void foo(T) { std::cout << "signed\n"; }
+#include "things/same.hpp"
 
-template <std::unsigned_integral T>
-void foo(T) { std::cout << "unsigned\n"; }
+template <class... Args>
+    requires msa::are_same_v<Args...>
+auto sum_all(Args&&... args) {
+    return (args + ...);
+}
 
-int main() {
-    foo(1u);
-    foo(1);
+template <std::same_as<int>... Args>
+int sum_allInt32(Args&&... args) {
+    return (args + ...);
+} 
+
+int main() {   
+    std::cout << sum_allInt32(1, 2, 3, 4) << '\n';
+    std::cout << sum_all(1, 2, 3, 4, 1) << '\n';
+
 }
