@@ -1258,3 +1258,378 @@ int main() {
     Stack<S> s;
     s.emplase_back(1);
 }
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//------------------------------------лямбда----------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+//----------------------------------
+// лямбда без захвата - объект с перегруженным приведением к указателю на функцию.
+// лямбда с захватом - объект с перегруженным operator();
+
+auto adder = [](int x, int y) -> int { return x + y; };
+
+struct Closure {
+    static int func(int x, int y) { return x + y; }
+    using func_t = std::decay_t<decltype(func)>;
+    operator func_t() const { return func; };
+};
+
+// есть приведения типов
+int (*pf)(int x, int y) = adder; // implicit cast
+
+
+//----------------------------------
+// Callable:
+// Указатель на функцию.
+// Объект с приведением к указателю на функцию.
+// Объект с круглыми скобками.
+
+
+//----------------------------------
+// std::invoke - унифицирует вызов
+
+
+//----------------------------------
+// closure
+auto test = []{}; // уникальная closure
+test = []{}; // CE
+
+// хак
+auto test = +[]{}; // test - уже указтель на функцию
+test = []{};
+
+
+//----------------------------------
+// для лучшего понимания лямбда
+
+decltype([](auto x) { return 2 * x; }) twice;
+
+auto x = twice(2);
+
+//----------------------------------
+// Явные шаблонные переменные в лямбде
+template <typename T, typename U>
+concept Addble = requires(T t, U u) { t + u; };
+
+
+auto l = []<class T, class U>(T x, U y) requires Addble<T, U> { return x + y; };
+
+
+//----------------------------------
+// Захват аргументов
+
+int a = 1, b = 2;
+
+auto param_adder = [a, b](int x, int y) {
+    return x * a + y * b;
+};
+
+// реализация лямбды
+struct Closure {
+    int a_, b_;
+    Closure(int a, int b) : a_(b), b_(b) {}
+    auto operator()(int x, int y) const { return x * a_ + y * b; }
+};
+
+
+//----------------------------------
+// mutable
+ 
+struct S {
+    int f() { return 1; }
+};
+
+
+int main() { 
+    S s;  
+    auto f = [s]() mutable { return s.f(); }; // захват по значению - const
+    auto f2 = [&s]() { return s.f(); }; // захват по значению - const
+}
+
+//----------------------------------
+// Зазват ссылки, как константы
+int main() { 
+    int a = 5;
+                    // rename
+    auto p = [&r = std::as_const(a)](int x) mutable { r += x; return x; }; // CE
+}
+
+
+//----------------------------------
+// Улучшение проброса
+
+std::unique_ptr<int> i = std::make_unique<int>(1);
+
+auto l = [r = std::move(i)]() { return 1; }; // не копируется 
+
+template <class Fun, class... Args>
+decltype(auto) transparent(Fun&& fun, Args&&... args) {
+    return std::invoke(std::forward<Fun>(fun), std::forward<Args>(args)...);
+}
+
+
+//----------------------------------с
+// паки в лямбдах
+template <class... Args>
+void f(Args&& ... args) {
+    auto varPack = [...a = std::forward<Args>(args)] { return sizeof...(args); };
+    std::cout << varPack() << '\n';
+} 
+
+
+//----------------------------------
+// Каррирование
+
+auto add = [](auto x, auto y) { return x + y; };
+
+template <class Func, class... Args>
+auto curry(Func func, Args&&... Args) {
+    return [=](auto... rest) {
+        return func(std::foward<Args>(args)..., rest...);
+    }
+}
+
+auto add4 = curry(add, 4);
+int main() {
+    assert(add4(11) == 15);
+}
+
+
+//----------------------------------
+// Правило захвата
+// [=] {} - Захватывается только локольный нестатический контекст. (global: int n; static int n = 0;)
+
+
+//----------------------------------
+// Проброс в зависимости от value
+template <class T> 
+auto fwd_capture(T&& x) {
+    struct CapT { T value; };
+    return CapT{ std::forward<T>(x) };
+}
+
+int main() {
+    int x = 1;
+
+    auto foo = []<class T>(T&& a) {
+        return [a = std::forward<T>(a)]() mutable { return ++a; }; // берет только по значению.
+    };
+
+    auto f = foo(x);
+    f();
+    assert(x == 1); // OK
+
+    auto bar = []<class T>(T&& a) {
+        return [a = fwd_capture(a)]() mutable { return ++a.value; };
+    };
+
+    auto b = bar(x);
+    b();
+    assert(x == 2); // OK
+}
+
+
+// Обобщение пробросса
+template <class... T> 
+auto fwd_capture(T&&... x) {
+    return std::tuple<T...>(std::forward<T>(x)...);
+}
+
+
+int main() {
+    int x = 1;
+
+    auto foo = []<class... T>(T&&... a) {
+        return [a = std::fwd_capture(a...)]() mutable { 
+            return ++std::get<0>(a); 
+        }; 
+    };
+}
+
+
+
+// #################################################################
+// Еще про structure bindings
+
+// на tuple
+auto [xv, yv, zv] = make_tuple("a", 1.0, 4); 
+auto [xrv, yrv] = make_tuple(2, 3);
+
+// на массивы
+int a[2] = {1, 2};
+auto& [xr, yr] = a;
+
+// на структуры
+struct { int x, y; };
+const auto& [xcr, ycr] = b;
+// #################################################################
+
+
+// Улучшение обобщенного пробросса
+int main() {
+    int x;
+
+    auto foo = []<class... T>(T&&... a) {
+        return 
+        [a = std::forward_as_tuple(a...)]() mutable {
+            return ++std::get<0>(a);
+        };
+    };
+}
+
+
+//----------------------------------
+// Применение кортежа как аргументов
+std::apply([&fn]<class... T>(T&& ... xs) {(fn(std::forward<T>(xs)), ...);}, t);
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//---------------------------------type erasue--------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+int main() {
+    std::any x = 1;
+    std::cout << std::any_cast<int>(x) << '\n';
+    x = std::string("asfd");
+    x.has_value();
+
+
+
+
+    std::variant<int, double, char> v;
+
+    v = 1;
+
+    std::cout << std::holds_alternative<int>(v) << ' '
+              << std::holds_alternative<char>(v) << '\n';
+
+    std::cout << std::get<int>(v) << '\n';
+
+    try { std::get<double>(v); } 
+        catch(const std::exception& e) {std::cout << e.what() << '\n'; } 
+
+    
+
+
+    std::vector<decltype(v)> vec(2);
+    vec[0] = v;
+    vec[1] = 1.1;
+
+    for (const auto& var : vec) {
+        std::visit(
+            [](auto&& arg) { std::cout << arg << '\n'; }
+            , var
+        );
+    }
+}  
+
+
+//----------------------------------
+// перегрузка лямбд
+template <class... F> struct overload : F... { using F::operator()...; };
+template <class... F> overload(F&&...) -> overload<F...>;
+
+
+int main() {
+    std::vector<std::variant<int, double>> v(2);
+    v[0] = 1;
+    v[1] = 2.1;
+
+    auto o = overload(
+        [](int) { std::cout << "int\n"; },
+        [](double) { std::cout << "double\n"; }
+    );
+
+    for (const auto& var : v) {
+        std::visit(o, var);
+    }
+}  
+
+
+// #################################################################
+// rodate
+/*
+        .rodata (Read-Only Data) — секция памяти, где хранится
+        константные данные программы, такие как
+        строковые литералы и значения const. Эта секция
+        является только для чтения и обычно располагается в
+        памяти с правами доступа, запрещающими запись.
+*/
+// #################################################################
+
+
+
+// #################################################################
+// heap indirection
+/*
+        Heap indirection (перенаправление через кучу) — это 
+        паттерн проектирования структуры данных, при котором 
+        указатели или ссылки на данные, находящиеся в куче (heap), 
+        хранятся в другой структуре данных
+*/
+// #################################################################
+
+
+
+//----------------------------------
+// рекурсия для лямбд
+int main() {
+    std::function<int (int)> factorial = [&] (int i) {
+        return (i == 1) ? 1 : i * factorial(i - 1);
+    };
+
+    auto closure []() {}; // объект на стеке
+    std::function<void(void)> func = []() {}; // heap indirection
+}  
+
+// c++23 move only function
+std::move_only_function<int(int)> func = [x == std::move(v)] { std::move(f)();} // вызывается 1 раз
+
+
+
+
+
+//----------------------------------
+// явный аргумент this 
+
+// проблема
+// std::function<int(int)> func = [x](int a) {...}
+// func(1) func captured x
+// std::move(func)(2) finally use captured x  x - можно мувноть
+
+int main() {
+    int m = 1;
+    std::vector<int> v;
+    auto callback = [m, &v](this auto&& self) {
+        v.push_back(std::forward_like<decltype(self)>(m));
+    }; 
+
+    callback(); // x -> copy to v
+    std::move(callback)(); // x -> move to v
+}   
+
+
+
+//----------------------------------
+// c++23 улучшение
+int main() {
+    // c++ 23
+    auto factorial = [](this auto&& self, int i) {
+        return (i == 1) ? 1 : i * self(i - 1);
+    }; 
+}   
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//------------------------------диапазоны (range)-----------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
