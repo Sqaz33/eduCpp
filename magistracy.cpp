@@ -1633,3 +1633,56 @@ int main() {
 //------------------------------диапазоны (range)-----------------------------
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
+
+
+int main() {
+
+    std::vector v = {1, 2, 3, 4};
+
+    auto double_even = v 
+                    | std::views::filter([](int a) -> bool { return !(a % 2); })  
+                    | std::views::transform([](int a) -> int { return a * 2; });
+
+    std::vector<int> res;
+
+
+    std::copy(double_even.begin(), double_even.end(), std::back_inserter(res));
+}   
+
+
+//----------------------------------
+// mem_fn
+struct S { int x, y; };
+
+int main() {
+    S s; s.x = 1;
+
+    auto sx = std::mem_fn(&S::x);
+    std::cout << sx(s) << '\n'; // 1
+
+
+    std::array<S, 4> arr({ {1, 1}, {2, 2}, {3, 3}, {4, 4} });  
+    
+    auto vv = std::views::transform(arr, std::mem_fn(&S::x));
+    auto it = std::ranges::find(vv, 4);
+
+
+    std::cout << it.base()->x << '\n';  // 4
+
+}   
+
+//----------------------------------
+// провисание итератора на view
+
+struct S { int x, y; };
+
+int main() {
+    std::array<S, 4> arr({ {1, 1}, {2, 2}, {3, 3}, {4, 4} });  
+    
+    auto it = std::ranges::find(
+            std::views::transform(arr, std::mem_fn(&S::x)), 4); 
+    // it - ranges::dengling
+
+
+    // std::cout << *it.x << '\n';  
+}   
