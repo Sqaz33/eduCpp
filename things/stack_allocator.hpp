@@ -38,13 +38,11 @@ StackAllocator<T>::~StackAllocator() {
 template <class T>
 T* StackAllocator<T>::allocate(size_t count) {
     return std::exchange(top_, top_ + count);
-}
-
+} 
 template <class T>
 void StackAllocator<T>::deallocate(T*, size_t count) {
     top_ -= count;
 }
-
 
 template <class T>
 template <class... Args>
@@ -54,7 +52,6 @@ void StackAllocator<T>::construct(T* obj, Args&&... args) {
 
 template <class T>
 void StackAllocator<T>::destroy(T* obj) { obj->~T(); }
-
 
 } // namespace mvp
 

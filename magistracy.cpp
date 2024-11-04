@@ -1686,3 +1686,127 @@ int main() {
 
     // std::cout << *it.x << '\n';  
 }   
+
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//---------------------------Полиморфные аллокаторы---------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+
+// #################################################################
+// alignment
+/*
+        В C++ выравнивание (alignment) — это характеристика 
+        данных в памяти, которая определяет, на каком
+        адресе памяти должен начинаться объект данного типа. 
+        Оно связано с тем, что процессоры могут быть
+        настроены на наиболее эффективное обращение к данным, 
+        когда они расположены по определённым адресам.
+*/
+// #################################################################
+
+
+/*
+    A polymorphic_allocator is intended to let you have an 
+    allocator whose behavior is dynamically determined at runtime.
+*/
+
+//----------------------------------
+// Абстракция ресурса в памяти.
+struct memory_resource {
+    void* allocate(size_t n, size_t align = alignof(max_align_t));
+    void deallocate(void* p, size_t n);
+    bool is_equal(const memory_resource&) const noexcept;
+
+    virtual ~memory_resource() {}
+protected:
+    virtual void* do_allocate(size_t n, size_t align) = 0;
+};
+
+int main() {
+
+    char buffer[10] alignas(double);
+
+    std::cout << sizeof buffer << '\n';
+}   
+
+
+//----------------------------------
+// pmr
+int main() {
+    namespace pmr = std::pmr;
+
+    constexpr size_t sz = 1000 * sizeof(int);
+    std::array<std::byte, sz> buf;
+    pmr::monotonic_buffer_resource mem_resource(&buf, sz);
+
+    pmr::vector<int> v(&mem_resource);
+}   
+
+//----------------------------------
+// Абстракция аллокатора
+template <class T> struct polymorphic_allocator 
+{ /* реализует аллокаторы из с++11, хранит ссылку на memory_resource.*/ };
+
+// Полиформные аллокаторы - не пропагируется.
+
+
+
+//----------------------------------
+// Про pmr-контейнеры
+
+
+// list и трюк с union
+template <class T> struct node;
+
+template <class Tp> struct node_base { 
+    node<Tp>* next_ = nullptr; 
+    node_base(const node_base&) = delete;
+    node_base(node_base&&) = delete;
+};
+
+template <class Tp> struct node : node_base<Tp> {
+    union { Tp value_; };
+    // начиная с с++11, union может содержать классы с конструктором, но не вызывает их. 
+};
+
+template <class T> struct slist {
+    using value_type = T;
+    using iterator = <итератор>;
+    
+    // все остальное
+private:
+
+    using allocator_type = pmr::polymorphic_allocator<std::byte>;
+
+    node_base head_; // сторожевой узел пустого списка.
+    node_base* ptail;
+    size_t size;
+    allocato_type alloc_; // храним аллокатор.
+};
+
+
+// использование аллокатора
+template <class T>
+template <class... Args>
+iterator slist<T>::emplace(iterator i, Args&&... args) {
+    void* mem = alloc.resource()->allocate(sizeof(node), alignof(node));
+    node* ret = static_cast<node*>(mem);
+    ret->next = i.prev->next;
+    alloc_.construct(std::addressof(ret->value_), // * std::addresof - всегда возвращает адрес, даже если перегружен &.
+                    std::forward<Args>(args)...);
+    i.prev->next = ret;
+}
+
+// прекол жесткий
+pmr::vector<int> foo() { return pmr::vector<int> {some_alloc}; }
+pmr::vector<int> v = foo(); // v.alloc - some_alloc
+pmr::vector<int> w;
+w = foo(); // w.alloc - default alloc
+
+// аллокаторы - привязаны к месту.
+
