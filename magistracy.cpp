@@ -1906,3 +1906,151 @@ int main() {
     assert(b.expired());
     assert(b.lock() == nullptr);
 }
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//---------------------------Динамический полиморфизм-------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+// Мотивация полиморфизма.
+/*
+    * Нужно переиспользовать интерфейс базового класса для разных 
+      произовадных классаов для вызова через косвенность.
+    
+    * Нужно вернуть из функции что-то в зависимости от условий времени 
+      исполнения.
+    
+    * Нужно положить в контейнер много разнородных объектов.
+
+    * Нужно переиспользовать реализацию.
+
+*/
+
+template <class Derived> struct object_t {
+    void draw(std::ostream& os, size_t pos) const {
+        static_cast<const Derived*>(this)->draw(os, pos);
+    }
+
+protected: object_t() = default;
+};
+
+
+struct int_t : object_t<int_t> {
+    int data;
+    void draw(std::ostream& os, size_t pos) const {
+        os << std::string(pos, ' ') << data;   
+    }
+};
+
+
+
+// #################################################################
+// mixin
+/*
+        В C++ mixin — это шаблон проектирования, который 
+        позволяет добавлять функциональность к классу через
+        множественное наследование. Mixin-классы не 
+        предназначены для самостоятельного использования, их
+        цель — предоставлять методы и данные, которые могут 
+        быть "подмешаны" в другие классы.
+*/
+// #################################################################
+
+//----------------------------------
+// CRTP-mixin clone
+struct object_t {
+    virtual std::unique_ptr<object_t> clone() const = 0;
+    virtual ~object_t() {}
+};
+
+template <class Base, class Derived> 
+struct MixClonable : public Base {
+    std::unique_ptr<Base> clone() const override {
+        return std::unique_ptr<Base>(
+            new Derived(static_cast<const Derived&>(*this))
+        );
+    }
+};
+
+struct int_t : MixClonable<object_t, int_t> { };
+
+
+//----------------------------------
+// Симметрия исключений
+struct File;
+
+struct IFile : File;
+struct OFile : File;
+
+struct IOFile : IFile, OFile;
+
+try {
+    IOFile iof;
+    File& f = iof; 
+    throw IOFile();
+} catch(File&) {
+    // сюда мы не попадем.
+}
+// Через RTTI не видно неоднозначные базы.
+
+
+
+// База должна быть правильно по модификаторам, чтобы работал RTTI.
+struct InputFile : protected File {
+    File* spawn() { return static_cast<File*>(this); }
+};
+
+InputFile* inf = new InputFile(11);
+File* f = inf->spawn(); // OK
+f = static_cast<File*>(inf);
+
+try { throw inf; }
+catch(File& f) { /*Мы не поймаем InputFile inf. */ }
+
+
+//----------------------------------
+// Влияние на инициализацию
+
+struct File {
+    File(int);
+};
+
+struct IFile : virtual File {
+    IFile(int b) : File(b) {}
+};
+
+struct OFile : virtual File {
+    OFile(int c)  : File(c) {}
+};
+
+struct IOFile : IFile, OFile {
+    IOFile(int d) : IFile(d), OFile(d), File(d) {} 
+}
+
+
+//----------------------------------
+// Виды dynamic_cast
+
+dynamic_cast<void*>(p); // к most derived
+
+dynamic_cast<child*>(p); // вниз
+
+dynamic_cast<sibling*>(p); // влево или вправо
+
+
+
+//----------------------------------
+// Пробеммы динамического полиморфизма
+
+// Требует ссылочной семантики.
+void f(Base& b) { b.reset(nullptr); }
+
+// Провоцирует выделение в куче -> Ад с влодением.
+
+
+
+
+
+
