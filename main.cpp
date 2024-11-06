@@ -1,35 +1,30 @@
 #include <iostream>
+#include <type_traits>
 #include <thread>
 #include <mutex>
 
-// RAII синхронизация
+namespace prekol {
 
-namespace {
+struct Buf {
+    Buf() { std::cout << "Buf::Buf()\n"; }
+    ~Buf() { std::cout << "Buf::~Buf()\n"; }
+};
 
-void __attribute__((noinline)) use(int c) { asm(""); }  
+void do_tmng() { throw std::bad_exception(); }
 
-int x;
-std::mutex mforx;
-
-void race() {
-    for (int i = 0; i < 1'000'000; ++i) { 
-        std::lock_guard<std::mutex> lk(mforx);
-        x += 1; use(x); 
+struct Impl : Buf {
+    Impl() : Buf() {
+        do_tmng();
     }
-    for (int i = 0; i < 1'000'000; ++i) { 
-        std::lock_guard<std::mutex> lk(mforx);
-        x -= 1; use(x); 
-    }
-} 
+};
 
-} // namespace
+} // namespace prekol
 
 int main() {
-    std::thread t1{race};
-    std::thread t2{race};
+    using namespace prekol;
 
-    t1.join();
-    t2.join(); 
-
-    std::cout << x << std::endl; 
+    try { Impl i; } catch(...) { }
+    // on display
+    // Buf::Buf() 
+    // Buf::~Buf()
 }

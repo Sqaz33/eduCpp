@@ -5,4 +5,5 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 project(edu)
 
+
 add_executable(main main.cpp)

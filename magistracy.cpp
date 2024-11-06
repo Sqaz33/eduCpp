@@ -2309,4 +2309,145 @@ int main() {
 
 // Общее между потоками и исключениями - нелокальная передача управления.
 
-// https://en.cppreference.com/w/cpp/language/exceptions
+
+
+// #################################################################
+// Exception guarantee
+/*
+    1. Nothrow (or nofail) exception guarantee. Гарантия отсутствия 
+       исключений: функция никогда не выбрасывает исключений.
+
+    2. Strong exception guarantee. Сильная гарантия исключений:
+       если функция выбрасывает исключение, состояние программы
+       откатывается до состояние перед вызовом функции.
+    
+    3. Basic exception guarantee. Базовая гарантия исключений:
+       программа остается в корректном состоянии. Нет утечек ресурсов
+       все инварианты объектов сохоранены. Объект остается в согласованном, 
+       но не предсказуемом состоянии (можно корректно вызвать деструктор).
+
+    4. No exception guarantee. Отсутсвие гарантий: если функция 
+       выбрасывает исключение - программа может оказатсья в некоректном
+       состоянии. 
+*/
+
+// * Деструкторы начиная с с++11 - noexcept
+// #################################################################
+
+
+// Уровни безопасности для многопоточного окружения.
+/*
+        Нейтральный уровень. "Нейтральные объекты"
+        Если такой объект защищен синхронизацией, то он безопасен.
+        Если нет, то нет. 
+        Например: int.
+
+        Ниже нейтрального уровня.
+        T* - указатели. 
+        То что под ними может быть не синхронизировано.
+
+        Выше нейтрального уровня.
+        Безопасным относительно многопоточного окружения
+        является объект, любые операции над которым в
+        многопоточном окружении не приводят к data race. 
+        Иначе говоря - объект не переходит в некосистентное 
+        состояние.
+*/
+
+class MyBuffer {
+    std::mutex bufmut_;
+public:
+    void pop() {
+        std::lock_guard<mutex>{bufmut_};
+        --size_;
+        destroy(buffer_ + size)_; 
+    }
+
+    T top() const; // аналогично
+    bool empty() const; // аналогично
+};
+
+// API races
+Buf s;
+if (!s.empty()) {        // все
+    auto elem = s.top(); // очень
+    s.pop();             // плохо
+    use(elem);
+}
+// Гонка между poo() и top().
+// Хот и все 3 метода с lock_guard.
+
+
+// dead lock
+struct DL {
+    std::mutex dlmut_;
+} 
+x, y;
+
+int main() {
+
+    auto f = [](DL& a, DL& b) {
+        std::lock_guard<std::mutex> m1(a.dlmut_);
+        int x;
+        for (int i = 0; i < 100'000; ++i) x = i;
+        std::lock_guard<std::mutex> m2(b.dlmut_);
+
+    };
+
+    std::thread t1(f, std::ref(x), std::ref(y)); 
+    std::thread t2(f, std::ref(y), std::ref(x)); 
+    t1.join();
+    t2.join();
+
+    // std::tread
+
+}
+
+//----------------------------------
+// std::lock
+struct DL {
+    std::mutex dlmut_;
+} 
+x, y;
+
+int main() {
+
+    auto f = [](DL& a, DL& b) {
+        std::lock(a.dlmut_, b.dlmut_); // атомарно блочит все мьютексы
+        std::lock_guard<std::mutex> m1(a.dlmut_, std::adopt_lock);  
+        // std::adopt_lock - просто разлочит в деструкторе
+        int x;
+        for (int i = 0; i < 100'000; ++i) x = i;
+        std::lock_guard<std::mutex> m2(b.dlmut_, std::adopt_lock);
+
+    };
+
+    std::thread t1(f, std::ref(x), std::ref(y)); 
+    std::thread t2(f, std::ref(y), std::ref(x)); 
+    t1.join();
+    t2.join();
+}
+
+// c++17 solution
+struct DL {
+    std::mutex dlmut_;
+} 
+x, y;
+
+int main() {
+
+    auto f = [](DL& a, DL& b) {
+        std::scoped_lock sl{a.dlmut_, b.dlmut_}; // много вилок.
+        // std::lock(a.dlmut_, b.dlmut_);
+        // std::lock_guard<std::mutex> m1(a.dlmut_, std::adopt_lock);
+        int x;
+        for (int i = 0; i < 100'000; ++i) x = i;
+        // std::lock_guard<std::mutex> m2(b.dlmut_, std::adopt_lock);
+
+    };
+
+    std::thread t1(f, std::ref(x), std::ref(y)); 
+    std::thread t2(f, std::ref(y), std::ref(x)); 
+    t1.join();
+    t2.join();
+}
