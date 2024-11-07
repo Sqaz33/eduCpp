@@ -1444,7 +1444,7 @@ int main() {
     int x = 1;
 
     auto foo = []<class... T>(T&&... a) {
-        return [a = std::fwd_capture(a...)]() mutable { 
+        return [a = fwd_capture(a...)]() mutable { 
             return ++std::get<0>(a); 
         }; 
     };
@@ -1484,9 +1484,20 @@ int main() {
 
 //----------------------------------
 // Применение кортежа как аргументов
-std::apply([&fn]<class... T>(T&& ... xs) {(fn(std::forward<T>(xs)), ...);}, t);
+template <class T> 
+void print(T v) { std::cout << v << ' '; }
 
 
+int main() {
+    auto tpl = std::make_tuple(1, 2, 3, 4);
+    
+    std::apply(
+        [=]<class... T>(T&&...v) {(print(std::forward<T>(v)), ...);},
+        tpl
+    );
+
+    std::cout << std::endl;
+}
 
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
@@ -2164,7 +2175,7 @@ int main() {
         [intro.races]
 * /
 
-// race
+// race (data race)
 /*
         Выполнение программы содержит гонку данных, если она содержит
         два потенциально конкурентных (в разных потоках) конфликтующих выражения,
@@ -2626,3 +2637,281 @@ struct sometype {
 
 // Консьюмеры - потоки, которые исполняют задачи.
 // Продюссеры - потоки, которые производят задачи.
+
+// очередь с ограниченным буфером
+namespace {
+
+template <class T>
+class ts_queue {
+    std::condition_variable condConc_, condProd_;
+    std::mutex qmut_;
+    std::array<T, 100> buf_;
+    size_t cur_ = -1;
+
+    bool done_ = false; // решение
+
+    const size_t MAX_SZ = buf_.max_size();
+
+public:
+    bool full() const { return cur_ == MAX_SZ; }
+    bool empty() const { return cur_ == -1; }
+    bool done() const { return done_; } // решение
+
+    void push(T v) {
+        std::unique_lock<std::mutex> lk{qmut_};
+        condProd_.wait(lk, [this] { return !full() /* решение */ || done(); }); 
+        if (done()) { return; } // решение
+        buf_[++cur_] = v; 
+        condConc_.notify_one();
+    }
+
+    void waitNPop(T& v) {
+        std::unique_lock<std::mutex> lk{qmut_};
+        condConc_.wait(lk, [this] { return !empty() /* решение */ || done(); });
+        if (done()) { return; }  // решение
+        v = buf_[cur_--];
+        condProd_.notify_one(); 
+    }
+
+    void wakeNDone() { // решение
+        done_ = true;
+        condConc_.notify_all();
+        condProd_.notify_all();
+    }
+};
+
+// Зависание в данной очереди
+/*
+    Может зависнуть - все консьюмеры разберут задачи,
+    новых задач не будет, а последнего косьюмера уже 
+    никто не разбудет. 
+
+    Исполнения программы - исполнение всех ее потоков.
+*/
+
+} // namespase 
+
+int main() {
+
+    ts_queue<int> q;
+
+    auto f = [&] { 
+        for (;;) {
+            // ...
+            // работа с очередью
+            if (bool alldone = true; alldone) {
+                break;
+            }
+        }
+        q.wakeNDone();
+    };
+
+    std::thread t1(f), t2(f);
+    t1.join(); t2.join();
+} 
+
+
+// #################################################################
+// Function try block
+    void foo(int) try
+    {
+        throw 2;
+    }
+    catch (...)
+    {
+        // handles the exception 2
+    }
+// #################################################################
+
+
+
+//----------------------------------
+// Возврат данных из потока
+auto divi = [](int& res, int a, int b) {
+    res = a / b;
+};
+
+//---
+// или так 
+auto divi = [](auto&& res, auto a, auto b) { // auto&& - std::ref() -> rvalue
+    res.get() = a / b; // type(res) - ref_wrapper
+};
+//--
+
+int result;
+std::thread t(divi, std::ref(result), 30, 6); 
+// std::ref - потому что, вывод типов не работает через 2 уровня  
+t.join();
+std::cout << "result: " << result << std::endl;
+
+
+// но передача result в разные потоки, даже как std::ref - может вызвать data race.
+
+
+//----------------------------------
+// Возврат данных из потока
+
+/*
+    В C++ std::promise и std::future — это механизмы 
+    стандартной библиотеки, которые позволяют
+    организовать асинхронное выполнение задач. 
+    Они позволяют выполнять задачи в одном потоке и получать
+    результат в будущем в другом потоке.
+*/
+
+std::promise<int> p; 
+// объект для хранения значения, которое будет ассинхронно переданно объекту std::futer
+
+std::future<int> f = p.get_future();
+// объект, значение в котором будет доступно позже
+
+auto divi = [](auto&& res, auto a, auto b) { 
+    res.set_value(a / b);
+};
+
+sdt::thread t(divi, std::move(p), 30, 6);
+t.detach();
+std::cout << "res: " << f.get() /* точка синхронизации */ << std::endl;
+
+
+//----------------------------------
+// Правила осторожности 
+std::promise<int> pr; auto fut = pr.get_future();
+fut.get(); // deadlock
+
+
+std::promise<int> pr; pr.set_value(10); 
+pr.set_value(10); // err: promise alredy satisfied
+
+std::promise<int> pr; auto fut = pr.get_future();
+{ std::promise<int> pr2(std::move(pr))} // err: broken promise
+
+
+
+// #################################################################
+// exception_ptr
+std::exception_ptr get_exception() {
+    try { throw "exception"; }
+    catch(...) { return current_exception(); }
+    return nullptr;
+}
+
+std::exception_ptr e = get_exception();
+std::rethrow_exception(e);  
+// #################################################################
+
+
+//----------------------------------
+// Маршалинг исключений
+auto divi = [](auto&& res, auto a, auto b) {
+    try {
+        if (b == 0) throw "Divide by zero";
+        res.set_value(a / b);
+    } catch(...) {
+        res.set_exception(std::current_exception());
+    }
+}
+
+std::cout << "res: " << f.get() /* если было ислкючение, то тут его выбросит */ << std::endl;
+
+
+
+//----------------------------------
+// Упаковка задач
+
+auto divi = [](auto a, auto b) {
+    if (b == 0) throw std::overflow_error("Divided by zero");
+    return a / b;
+};
+
+std::packaged_task<int(int, int)> task {divi};
+std::future<int> f = task.get_future(); // неявный promise
+std::thread t(std::move(task), 30, 0);
+
+
+//----------------------------------
+// прерываемые потоки
+
+// jthread - делает join в dctor
+{
+    std::jthread jt(t_func, 5);
+}
+
+std::jthread t; assert(t.joinable(), false); // можно ли вызвать t.join()
+t = std::jthread(foo); assert(t.joinable(), true);
+t.join(); assert(t.joinable(), false);
+
+
+// std::stop_token
+void bar(std::stop_token st, int value) {
+    while(!st.stop_requsted()) {
+        std::cout << value++ << '\n';
+    }
+}
+
+int foo() {
+    std::jthread t(bar, 5);
+    std::this_thread::sleep_foor(1s);
+    t.request_stop(); // попросить остановится
+}
+
+
+//----------------------------------
+// Барьеры
+
+void prepare(std::promise<void>&& Ready, 
+            std::shared_future<void> BackLink) {
+    // do smthng
+    Ready.set_value();
+    BackLink.wait(); // ждет set_value
+    // do smthng else when signaled
+}
+
+// барьер на std::latch
+void prepare(std::latch& L, std::latch& BackL) {
+
+
+    L.count_down();
+    BackL.wait();
+
+
+}
+
+int main() {
+    std::latch L(2);
+    std::latch BackL(1);
+
+    std::thread t1(prepare, std::ref(L), std::ref(BackL));
+    std::thread t2(prepare, std::ref(L), std::ref(BackL));
+
+    L.wait(); // ждем 2-х count_down для L.
+
+    // ....
+
+    BackL.count_down();
+
+    // resume work with latch
+
+    t1.join(); t2.join();
+} 
+
+//----------------------------------
+// таск креертор для очереди
+
+using task_t = std::move_only_function<int()>;
+template <class F, class... Args>
+auto create_task(F f, Args&&... args) {
+    std::packaged_task<std::reomove_pointer_t<F>> tsk {f};
+    auto fut = tsk.get_future();
+    task_t t{[ct = std::move(tsk), 
+              args = make_tuple(std::forward<Args>(args)...)]() mutable {
+                    std::apply(
+                        [ct = std::move(ct)] (auto&&... args) {
+                            ct(args...);
+                        },
+                        std::move(args));
+                    return 0;
+            }};
+
+    return std::make_pair(std::move(t), std::move(fut));
+}
