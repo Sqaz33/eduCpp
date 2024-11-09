@@ -2915,3 +2915,180 @@ auto create_task(F f, Args&&... args) {
 
     return std::make_pair(std::move(t), std::move(fut));
 }
+
+
+
+
+
+
+
+
+
+
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//-----------------------------(Concurency)Потоки-----------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+/*
+std::atomic — это шаблонный класс в C++, который предоставляет атомарные операции для работы с
+переменными. Атомарные операции — это операции, которые выполняются целиком, без прерываний, что
+особенно полезно в многопоточных приложениях, где важно избежать состояний гонки.
+
+Основные свойства std::atomic:
+    1. Атомарные операции: std::atomic гарантирует, что операции записи, чтения и
+       обмена данными выполняются полностью и не могут быть прерваны другим потоком.
+
+    2. Безопасность в многопоточности: std::atomic предотвращает состояние
+       гонки и обеспечивает согласованность данных между потоками.
+
+    3. Простота: предоставляет простой интерфейс для выполнения атомарных операций
+       без необходимости использования мьютексов или других механизмов синхронизации.
+*/
+
+// настоящая атомарность, без mutex - lock_free
+// std::atomic<smthng> - может быть lock_free, а может и не быть
+// std::atomic_flag - гарантированный lock_free
+
+
+// interface std::atomic
+std::atomic {
+    T load();
+    void store(T);
+    T exchange(T);
+
+    bool compare_exchange_weak(T&, T); 
+    bool compare_exchange_strong(T&, T); // expected&, desired
+}
+
+
+// проблеммы
+struct Counters { int a; int b; };
+
+void inc(std::atomic<Counters>& cnt) {  
+    Counters val = cnt.load();
+
+    // ....
+
+    val.a += 1; val.b += 1; 
+    // много потоков может одновременно инкрементить
+
+    // ....
+
+    cnt.store(val); 
+}
+// не race, но работает неправильно
+
+// решение через cas (compare and swap)
+bool inc(std::atomic<Counters>& cnt) {  
+    Counters oldval = cnt.load();
+    Counter newval {val.a += 1, val.b += 1}; 
+    return (cnt.compare_exchange_strong(oldval, newval));
+    // если cnt == exp -> cnt = des
+    // иначе exp = des
+}
+
+
+//------- ------ ------ ------- ------
+// lock-free programming
+
+// cas-loop 
+void inc(std::atomic<Counters>& cnt) {  
+    Counters oldval = cnt.load();
+    do {
+        Counter newval {val.a += 1, val.b += 1}; 
+    } while (!cnt.compare_exchange_strong(oldval, newval));
+}
+
+// cas-loop с weak cas
+void inc(std::atomic<Counters>& cnt) {  
+    Counters oldval = cnt.load();
+    do {
+        Counter newval {val.a += 1, val.b += 1}; 
+    } while (!cnt.compare_exchange_weak(oldval, newval)); 
+    // weak может иногда не сработать, и прокрутить цикл еще нмного
+    // ложно отрицательные срабатывания
+    // работает быстрее, чем strong 
+}
+
+// cas-loop - каждый поток делает forward-progress -> lock-free programming
+
+// Иерархия Саттера:
+/*
+        1. wait-free: каждая операция гарантированно завершается 
+           за конечное число шагов, независимо от того, что происходит.
+
+        2. lock-free: каждый следующий шаг в программе продвигает 
+           вперёд один из потоков.
+
+        3. obstruction-free: в каждой точке программы каждый поток завершается за 
+          конечное число шагов если работает в изоляции (то есть нет obstructing threads).
+*/
+
+// 2 способа работы с atomic
+auto cnl = cnt.load();
+
+auto cnl = std::adomic_load(&cnt);
+
+
+//----------------------------------
+// специализации для встроенных типов для std::atomic
+
+std::atomic<int> x = 0;
+int y = x++;
+
+int y = x.fetch_add(1); 
+
+
+//----------------------------------
+// Примерно: лучше делать атомиком самые простые типы - (int, char...)
+
+
+//----------------------------------
+// DCL Лавеля 
+std::atomic<resource*> resptr { nullptr };
+std::mutex resmut;
+
+void foo() {
+    resource* p = resptr.load(); // non-atomic p
+    if (p == nullptr) {
+        std::locK_guard<std::mutex> lk {resmut};
+        if (!resptr) resptr = p = new Resource();
+    }
+}
+p->use();
+
+
+// Синглтон Майерса
+
+resource* getres() {
+    static resource* p = new resource(); // init once 
+    return p;
+}
+
+void foo() {
+    resource* p = getres(); // it's OK
+    p->use();
+}
+
+// since c++11 static varible init atomic.
+
+
+//----------------------------------
+// Thread local
+
+Resource* getres() {
+    thread_local Reasource* P = new Resource(); // once per thread
+    return P;
+}
+// Как и в static duration
+/*
+        "Динамическая инициализация переменной с областью видимости блока, 
+        обладающей статической продолжительностью хранения или 
+        продолжительностью хранения потока, выполняется при первом 
+        прохождении управления через ее объявление; такая 
+        переменная считается инициализированной после 
+        завершения своей инициализации."
+*/
