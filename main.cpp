@@ -1,13 +1,24 @@
 #include <iostream>
-#include <functional>
+#include <atomic>
 #include <thread>
+#include <mutex>
+
+
+std::atomic<resource*> res;
+std::mutex mut;
+resource* getRes() {...}  
+
+
+void atomic_dcl() {
+    if (!res) {
+        std::lock_guard<std::mutex> lk{mut};
+        if (!res) res = getRes();
+    }
+}
+
 
 
 int main() {
-
-    std::move_only_function<void(int)> f = [](int a) { std::cout << a << '\n'; };
-    std::invoke(std::move(f), 1);
-    std::cout << (bool) f << '\n';
-    f(2);
-
+    int x = 1;
+    std::move(x);
 }

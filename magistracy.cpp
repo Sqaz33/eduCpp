@@ -2476,7 +2476,7 @@ int x{4.5}; // Ошибка компиляции, так как происход
 
 // double-cheked lock DCL 
 if (!resptr) { // UB
-    std::lock_guard<std::mutex> lk{resmut}ж
+    std::lock_guard<std::mutex> lk{resmut};
     if (!resptr) 
         resptr = new Resource();
 }
@@ -2928,7 +2928,7 @@ auto create_task(F f, Args&&... args) {
 
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
-//-----------------------------(Concurency)Потоки-----------------------------
+//---------------------------------Atomic-------------------------------------
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
 
@@ -2984,10 +2984,11 @@ void inc(std::atomic<Counters>& cnt) {
 // решение через cas (compare and swap)
 bool inc(std::atomic<Counters>& cnt) {  
     Counters oldval = cnt.load();
-    Counter newval {val.a += 1, val.b += 1}; 
+    Counter newval {val.a += 1, val.b += 1};  
+                                      // exp     des   
     return (cnt.compare_exchange_strong(oldval, newval));
     // если cnt == exp -> cnt = des
-    // иначе exp = des
+    // иначе exp = cnt
 }
 
 
@@ -3015,7 +3016,7 @@ void inc(std::atomic<Counters>& cnt) {
 
 // cas-loop - каждый поток делает forward-progress -> lock-free programming
 
-// Иерархия Саттера:
+// Иерархия гарантий для многопоточного кода:
 /*
         1. wait-free: каждая операция гарантированно завершается 
            за конечное число шагов, независимо от того, что происходит.
@@ -3024,7 +3025,7 @@ void inc(std::atomic<Counters>& cnt) {
            вперёд один из потоков.
 
         3. obstruction-free: в каждой точке программы каждый поток завершается за 
-          конечное число шагов если работает в изоляции (то есть нет obstructing threads).
+           конечное число шагов если работает в изоляции (то есть нет obstructing threads).
 */
 
 // 2 способа работы с atomic
@@ -3092,3 +3093,141 @@ Resource* getres() {
         переменная считается инициализированной после 
         завершения своей инициализации."
 */
+
+
+
+
+
+//----------------------------------
+// Проблеммы проектирования
+template <class T> class MySPTR {
+    CBlock* B;
+public:
+    MySPTR(const MySPTR& other) : B(other.b) {
+        B->counter += 1;
+    }
+    ~MySPTR() { if (--B->counter == 0) delete B; }
+}  // где B::counter - atomic<int>
+// data race - тут нет 
+// тк. объекта если 2 потока -> >= 2 объекта.
+
+ 
+template <class T> class MySPTR {
+    CBlock* B;
+public:
+    ~MySPTR() { if (--B->counter == 0) delete B; }
+
+    MySPTR& operator=(const T& Rhs) {
+        if (B->Counter == 1) {B->Data_ = Rhs; return *this;};
+        CBlock* Tmp = new CBlock(Rhs);
+        if (--B->Counter = 0) delete B;
+        B = Tmp; 
+        return *this;    
+    }
+} 
+// может показаться, что api race - но его тут нет.
+// тк. объекта если 2 потока -> >= 2 объекта.
+
+
+class DataHolder {
+    mutable atomic<bool> cached = false; // тут поменяли
+    mutable atomic<int> checkSum = 0;     // местами
+
+    int calc_checksum() const; // may be long
+
+public:
+    DataReader() = default;
+    DataHolder(const DataHolder& rhs) : chacked(rhs.cached.load()),       // тут тоже
+                                        checkSum(rhs.checkSum.load()) {}  // поменяли
+
+    int get_checksum() const {
+        if (!cached) {
+            checkSum = calc_checksum(); // и тут
+            cached = true;              // тоже
+        }
+        return checkSum;
+    }                                        
+} 
+
+//* для data rases есть helgrind и санитайзеры:
+//* g++ -g -O0 race.cc -pthread 
+//* valgrind --tool=helgrind ./a.out
+
+
+//----------------------------------
+// проблемы lock-free структур
+
+
+//*
+/* 
+    Dangling pointer (висячий указатель) в C++ —
+    это указатель, который ссылается на область 
+    памяти, которая была освобождена или больше 
+    не существует 
+*/
+
+// Reclamation problemc
+template <class T>
+class UNBDStack {
+
+    struct Node {
+        T data;
+        Node* next;
+    };
+
+    std::atomic<Node*> head_;
+
+public :
+    // CAS push
+    void push(T v) {
+        auto nw = new Node{ std::move(v), head_.load() };
+        while (head_.compare_exchange_weak(nw->next, nw)) {
+            std::this_thread::yield();
+        }
+    }
+
+    bool pop(T& v) {
+        auto cur = head_.load();
+
+    // ↑
+    // |
+    // Другой поток тоже вызывает pop и получает тот же cur
+    // но успевает стереть голову.
+    // Теперь cur - dangling pointer.
+    // |  
+    // ↓
+
+        while (head_.compare_exchange_weak(cur, cur->next)) { // ub 
+            std::this_thread::yield();
+        }
+        if (!cur) return false;
+        v = cur->data;
+        delete cur;
+    }
+
+};
+
+
+
+// ABA problem
+{
+    auto nw = new Node{ std::move(v), head_.load() };
+
+    // Один поток делает pop и реклеймит голову.
+    // Другой поток делает push и аллокатор отдает ему ту же память.
+    // Теперь Nw сново побитово равен Cur, но уже работает другой поток -> data race. 
+
+    while (head_.compare_exchange_weak(nw->next, nw));
+}
+
+// Atomic shared pointer
+// решает ABA и Reclaim для node-based list.
+
+template <class T> class if_stack { 
+    struct Node {
+        std::shared_ptr<Node> next;
+        T data;
+        Node(T data) : data(std::move(data)) {}
+    };
+    std::atomic<std::shared_ptr<Node>> Head = nullptr;
+}
