@@ -1,24 +1,23 @@
+#include <memory>
+#include <array>
 #include <iostream>
-#include <atomic>
+#include <utility>
 #include <thread>
-#include <mutex>
+#include <future>
 
 
-std::atomic<resource*> res;
-std::mutex mut;
-resource* getRes() {...}  
+struct S {
+    int x = 0;
 
+    operator bool() { return x; }
+};
 
-void atomic_dcl() {
-    if (!res) {
-        std::lock_guard<std::mutex> lk{mut};
-        if (!res) res = getRes();
-    }
-}
+int main() {    
+    S v;
+    v.x = 1;
 
+    bool y = v;
 
-
-int main() {
-    int x = 1;
-    std::move(x);
+    if (v) std::cout << 1 << '\n'; 
+    else std::cout << 0 << '\n';
 }
