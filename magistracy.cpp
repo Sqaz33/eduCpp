@@ -3289,8 +3289,126 @@ std::async(async | deferred, task, params);
 
 
 
+
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
 //-----------------------------сопрограммы(корутины)--------------------------
+//------------------------------------с++20-----------------------------------
 //----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
+
+
+// интерфейс функции 
+/*
+    1. вызвать = suspend (приостановить) + activate (со стороны caller)
+    2. вернуться = terminate + yield (продолжить) (со стороны callee)
+
+    дополнительно:
+    3. приостановить = suspend + yield (со стороны caller)
+    4. возобнавить = suspend + yield (со стороны callee)
+*/
+
+// симметричные корутины - переключение контекста (между корутинами).
+// асимметричные корутины - приостановка корутины и возварт куда-то, что может и не быть корутиной.
+
+// в языке с++ корутины - встроенные асимметричные
+
+// some python
+def natural_nums(): // это функция-генератор
+    num = 0
+    while Thue:
+        yield num // calle: suspend + yield
+        num = num + 1
+
+nums = natural_nums() // объект возобновляемой функции
+
+y = next(nums) // y = 0
+z = next(nums) // z = 1
+
+// some c++20
+generator natural_nums() { // функция-генератор
+    int num = 0
+    for (;;) {
+        co_yield num; // calle: suspend + yield
+        num += 1;
+    }
+}
+
+
+auto nums = natural_nums() // объект возобновляемой функции
+
+nums.move_next(); // возобновить
+auto y = nums.current_value(); // y = 0
+nums.move_next(); // возобновить
+auto z = nums.current_value(); // z = 1
+
+
+// что делает компилятор
+generator natural_nums() {
+    // компиялтор сгенерирует
+    typename generator::promise_type promise; // будет жить между возвратами в корутину
+    generator retobj = promise.get_return_object(); 
+}
+
+// корутина - отличается от функции наличием co_await, co_return, co_yield
+
+co_await <expr> // приостанавливает выполнение и отдает управление функции
+                // при этом exrp позволяет управлять процессом
+
+co_yield <expr> -> co_await promise.yield_value(<expr>)
+
+co_return -> co_await promise.return_void() end
+
+co_return <expr> -> co_await promise.return_value(<expr>) end
+
+// end - псевдотокен завершения корутины
+
+
+// интерфейс promise_type 
+/* 
+    get_return_object               - для объекта корутины
+    yield_value                     - для co_yield
+    return_void, return_value       - для co_return 
+    initial_suspend, final_suspend  - при начале и в конце жизни
+    unhandled_exception             - при исключения
+*/
+
+// c++23 генератор
+std::generator<int> natural_nums() { /* ... */ } 
+
+auto nums = natural_nums() | views::take(14);
+
+
+//никогда так не делать
+auto get_return_object() { return *this; }
+
+
+//----------------------------------
+// awaiter 
+
+co_await <expr> -> {
+    auto&& awaiter = <expr>;
+    if (!awaiter.await_ready()) {
+        // может вернуть результат
+        awaiter.await_suspend(handle_t::from_promise(promise));
+
+        // здесь может быть проверка результата
+        <suspend + yield if reuquired>
+        <resume point>
+    }
+    awaiter.await_resume(); // тоже может вернуть результат
+}
+
+// примерный std::suspend_always
+struct suspend_always {
+    bool await_ready() const noexcept { return false; } // alwais ready
+    void await_suspend(coroutine_handle<>) const noexcept { }
+    void await_resume() const noexcept { }
+}; // "всегда отдавай управление и ожидай" -> supend + yield
+
+// объекты типов с таким интерфейсом называются awaiter
+
+
+struct suspend_never {
+    bool await_ready() const noexcept { return true; }
+    ....
+}
