@@ -3354,7 +3354,7 @@ generator natural_nums() {
 co_await <expr> // приостанавливает выполнение и отдает управление функции
                 // при этом exrp позволяет управлять процессом
 
-co_yield <expr> -> co_await promise.yield_value(<expr>)
+co_yield <expr> -> co_await promise.yield_value(<expr>) 
 
 co_return -> co_await promise.return_void() end
 
